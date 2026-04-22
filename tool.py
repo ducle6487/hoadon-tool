@@ -1,0 +1,659 @@
+#!/usr/bin/env python3
+"""
+Hoa Don Dien Tu Auto-Fill Tool
+Reads an Excel file, auto-fills the public invoice lookup form at
+https://hoadondientu.gdt.gov.vn/lookup, and writes a results Excel file
+with the original data plus an embedded screenshot in the last column.
+
+Usage:
+    python tool.py invoices.xlsx
+    python tool.py invoices.xlsx --auto-captcha   # Claude AI solves CAPTCHA
+    python tool.py invoices.xlsx --headless        # no visible browser window
+
+Excel columns (case-insensitive):
+    nbmst     - MST người bán (Tax code, 10 or 14 digits) [required]
+    lhdon     - Loại hóa đơn (GTGT/HDBH/HDK/...) [default: GTGT]
+    khhdon    - Ký hiệu hóa đơn [required]
+    shdon     - Số hóa đơn (digits only) [required]
+    tgtthue   - Tổng tiền thuế [optional]
+    tgtttbso  - Tổng tiền thanh toán [required]
+"""
+
+import argparse
+import base64
+import io
+import os
+import sys
+import time
+from datetime import datetime
+from pathlib import Path
+
+import openpyxl
+import pandas as pd
+from openpyxl.drawing.image import Image as XLImage
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
+from PIL import Image as PILImage
+from playwright.sync_api import sync_playwright, Page, Locator
+
+# ── Config ────────────────────────────────────────────────────────────────────
+
+OUTPUT_DIR = Path("output")
+LOOKUP_URL = "https://hoadondientu.gdt.gov.vn/"
+MAX_CAPTCHA_RETRIES = 5
+
+# Thumbnail size embedded in the results Excel
+THUMB_W = 1920   # pixels wide
+THUMB_H = 1080   # pixels tall (max — aspect ratio is preserved)
+
+INVOICE_TYPE_MAP = {
+    "GTGT":   "Hóa đơn giá trị gia tăng",
+    "HDBH":   "Hóa đơn bán hàng",
+    "HBBTSC": "Hóa đơn bán tài sản công",
+    "HDDTQG": "Hóa đơn bán hàng dự trữ quốc gia",
+    "HDK":    "Hóa đơn khác",
+    "CT":     "Chứng từ được in, phát hàng, sử dụng và quản lý như hóa đơn",
+}
+
+# ── CAPTCHA helpers ───────────────────────────────────────────────────────────
+
+def get_captcha_answer(page: Page, auto_solve: bool) -> str:
+    img = page.locator(
+        "img[src*='captcha'], img[src*='Captcha'], "
+        ".ant-form-item:has-text('Mã captcha') img, "
+        "img[alt*='captcha']"
+    ).first
+    try:
+        img_bytes = img.screenshot()
+    except Exception:
+        img_bytes = None
+
+    if img_bytes:
+        Path("captcha_last.png").write_bytes(img_bytes)
+    print("    [CAPTCHA] captcha_last.png saved — check browser window.")
+    return input("    [CAPTCHA] Type the CAPTCHA: ").strip()
+
+
+# ── Form-fill helpers ─────────────────────────────────────────────────────────
+
+def _clear_fill(loc: Locator, value: str) -> None:
+    loc.click()
+    loc.press("Control+a")
+    loc.press("Backspace")
+    loc.fill(value)
+
+
+def _fill_number(page: Page, label_text: str, value, field_id: str = "") -> bool:
+    if value is None or str(value).strip() in ("", "nan"):
+        return False
+    raw = str(value).replace(",", "").replace(" ", "").strip()
+    try:
+        raw = str(int(float(raw)))
+    except ValueError:
+        return False
+
+    inp = None
+    # Try by ID first (most reliable)
+    if field_id:
+        loc = page.locator(f"input#{field_id}")
+        if loc.count():
+            inp = loc.first
+
+    # Fallback: label text match
+    if inp is None:
+        item = page.locator(".ant-form-item").filter(has_text=label_text)
+        loc = item.locator("input").first
+        if loc.count():
+            inp = loc
+
+    if inp is None:
+        print(f"    [WARN] Could not find input for '{label_text}'")
+        return False
+
+    inp.click()
+    time.sleep(0.2)
+    # Select all (Meta for macOS, Control for Linux/Windows)
+    inp.press("Meta+a")
+    inp.press("Backspace")
+    inp.type(raw, delay=50)
+    # Blur to trigger Ant Design value change
+    inp.press("Tab")
+    return True
+
+
+def _select_invoice_type(page: Page, lhdon: str) -> None:
+    lhdon = lhdon.upper().strip() if lhdon else "GTGT"
+    label_text = INVOICE_TYPE_MAP.get(lhdon, INVOICE_TYPE_MAP["GTGT"])
+    trigger = (
+        page.locator(".ant-form-item")
+        .filter(has_text="Loại hóa đơn")
+        .locator(".ant-select-selector")
+        .first
+    )
+    trigger.click()
+    page.wait_for_selector(".ant-select-dropdown:visible", timeout=5000)
+    option = page.locator(
+        f'.ant-select-item-option[title*="{label_text}"],'
+        f'.ant-select-item-option:has-text("{label_text}")'
+    ).first
+    if option.count():
+        option.click()
+    else:
+        page.locator(".ant-select-item-option").first.click()
+
+
+# ── Core browser logic ────────────────────────────────────────────────────────
+
+def fill_form(page: Page, row: dict, auto_solve: bool, captcha_fn=None) -> None:
+    page.wait_for_selector(".ant-form", timeout=20000)
+
+    # ── Dismiss any announcement / popup modal that covers the form ───────
+    try:
+        # Try the close button (X) on the modal
+        close_btn = page.locator(
+            ".ant-modal-close, "
+            ".ant-modal-wrap button.ant-modal-close, "
+            "button[aria-label='Close']"
+        ).first
+        if close_btn.count() and close_btn.is_visible():
+            close_btn.click(timeout=3000)
+            page.wait_for_timeout(500)
+    except Exception:
+        pass
+
+    # If a modal is still blocking, press Escape to dismiss it
+    try:
+        modal = page.locator(".ant-modal-wrap").first
+        if modal.count() and modal.is_visible():
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(500)
+    except Exception:
+        pass
+
+    mst = str(row.get("nbmst", "")).strip()
+    if mst:
+        inp = page.locator(
+            'input[id*="nbmst"], input[placeholder*="MST"]'
+        ).or_(
+            page.locator(".ant-form-item").filter(has_text="MST người bán").locator("input")
+        ).first
+        _clear_fill(inp, mst)
+
+    lhdon = str(row.get("lhdon", "GTGT"))
+    try:
+        _select_invoice_type(page, lhdon)
+    except Exception as exc:
+        print(f"    [WARN] Invoice type select failed: {exc}")
+
+    khhdon = str(row.get("khhdon", "")).strip()
+    if khhdon:
+        inp = page.locator(
+            'input[id*="khhdon"], input[placeholder*="Ký hiệu"]'
+        ).or_(
+            page.locator(".ant-form-item").filter(has_text="Ký hiệu hóa đơn").locator("input")
+        ).first
+        _clear_fill(inp, khhdon)
+
+    shdon = str(row.get("shdon", "")).strip()
+    if shdon:
+        inp = page.locator(
+            'input[id*="shdon"], input[placeholder*="Số hóa đơn"]'
+        ).or_(
+            page.locator(".ant-form-item").filter(has_text="Số hóa đơn").locator("input")
+        ).first
+        _clear_fill(inp, shdon)
+
+    _fill_number(page, "Tổng tiền thuế", row.get("tgtthue"), field_id="tgtthue")
+    _fill_number(page, "Tổng tiền thanh toán", row.get("tgtttbso"), field_id="tgtttbso")
+
+    solver = captcha_fn or get_captcha_answer
+    captcha_answer = solver(page, auto_solve)
+    captcha_inp = page.locator(
+        'input[id*="captcha"], input[placeholder*="captcha"], '
+        'input[placeholder*="Captcha"], input[placeholder*="mã"]'
+    ).or_(
+        page.locator(".ant-form-item").filter(has_text="Nhập mã captcha").locator("input")
+    ).first
+    _clear_fill(captcha_inp, captcha_answer)
+
+    page.locator(
+        'button[type="submit"]:has-text("Tìm kiếm"), button:has-text("Tìm kiếm")'
+    ).first.click()
+    page.wait_for_load_state("networkidle", timeout=20000)
+    time.sleep(0.8)
+
+
+# ── Screenshot embedding ──────────────────────────────────────────────────────
+
+def _make_thumb(screenshot_path: str) -> tuple[io.BytesIO, int, int]:
+    """Resize screenshot to thumbnail; return (BytesIO_png, width_px, height_px)."""
+    with PILImage.open(screenshot_path) as img:
+        img = img.convert("RGB")
+        img.thumbnail((THUMB_W, THUMB_H), PILImage.LANCZOS)
+        w, h = img.size
+        buf = io.BytesIO()
+        img.save(buf, format="PNG", optimize=True)
+        buf.seek(0)
+    return buf, w, h
+
+
+def embed_screenshots_in_input(
+    excel_path: str,
+    df: pd.DataFrame,
+    results: list[dict],
+) -> None:
+    """Open the input Excel file and append a screenshot column in-place."""
+
+    THIN   = Side(style="thin", color="B8CCE4")
+    BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
+    CENTER = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    HDR_FILL  = PatternFill("solid", fgColor="1F4E79")
+    HDR_FONT  = Font(bold=True, color="FFFFFF", size=11, name="Calibri")
+    OK_FILL   = PatternFill("solid", fgColor="E2EFDA")
+    ERR_FILL  = PatternFill("solid", fgColor="FCE4D6")
+    SKIP_FILL = PatternFill("solid", fgColor="FFF2CC")
+
+    wb = openpyxl.load_workbook(excel_path)
+    ws = wb.active
+
+    # Detect whether the hint row (Vietnamese labels) is present at row 2
+    hint_present   = str(ws.cell(2, 1).value or "").strip().startswith("MST")
+    data_start_row = 3 if hint_present else 2   # first Excel row that holds actual data
+
+    # New screenshot column = one past the current last column
+    ss_col        = ws.max_column + 1
+    ss_col_letter = get_column_letter(ss_col)
+
+    # ── Header cell (row 1) ───────────────────────────────────────────────────
+    h1 = ws.cell(row=1, column=ss_col, value="ket_qua")
+    h1.fill      = HDR_FILL
+    h1.font      = HDR_FONT
+    h1.border    = BORDER
+    h1.alignment = CENTER
+    ws.row_dimensions[1].height = max(ws.row_dimensions[1].height or 0, 28)
+
+    # ── Hint-row label (row 2, if present) ───────────────────────────────────
+    if hint_present:
+        h2 = ws.cell(row=2, column=ss_col, value="Kết quả")
+        h2.fill      = PatternFill("solid", fgColor="BDD7EE")
+        h2.font      = Font(bold=True, color="1F4E79", size=10, name="Calibri", italic=True)
+        h2.border    = BORDER
+        h2.alignment = CENTER
+
+    # ── Screenshot column width ───────────────────────────────────────────────
+    ws.column_dimensions[ss_col_letter].width = THUMB_W // 7 + 2
+
+    # ── Build row_num → result lookup ─────────────────────────────────────────
+    result_by_row = {r["row"]: r for r in results}
+
+    # ── Embed one image per data row ──────────────────────────────────────────
+    for df_idx in range(len(df)):
+        row_num   = df_idx + 1                      # 1-based, matches results list
+        excel_row = data_start_row + df_idx          # actual Excel row
+        result    = result_by_row.get(row_num, {})
+        status    = result.get("status", "skip")
+
+        cell           = ws.cell(row=excel_row, column=ss_col)
+        cell.border    = BORDER
+        cell.alignment = CENTER
+
+        if status == "ok" and result.get("file"):
+            try:
+                buf, w, h = _make_thumb(result["file"])
+                xl_img = XLImage(buf)
+                
+                # Keep high-res image data, but scale down visual display size in Excel
+                DISPLAY_W = 800
+                scale = min(1.0, DISPLAY_W / w) if w > 0 else 1.0
+                display_w = int(w * scale)
+                display_h = int(h * scale)
+                
+                xl_img.width  = display_w
+                xl_img.height = display_h
+                ws.add_image(xl_img, f"{ss_col_letter}{excel_row}")
+                
+                ws.row_dimensions[excel_row].height = display_h * 0.75 + 10
+                ws.column_dimensions[ss_col_letter].width = display_w / 7.5
+            except Exception as exc:
+                cell.value = f"Image error: {exc}"
+                cell.fill  = ERR_FILL
+        elif status == "error":
+            cell.value = f"LỖI\n{result.get('error', '')}"
+            cell.fill  = ERR_FILL
+            cell.font  = Font(color="C00000", size=10, name="Calibri")
+            ws.row_dimensions[excel_row].height = 40
+        else:
+            cell.value = "BỎ QUA"
+            cell.fill  = SKIP_FILL
+            cell.font  = Font(color="7F6000", size=10, name="Calibri")
+            ws.row_dimensions[excel_row].height = 22
+
+    wb.save(excel_path)
+    print(f"\nScreenshots embedded → {excel_path}")
+
+
+# ── Async processing (one browser, N concurrent tabs) ─────────────────────────
+
+import asyncio
+from playwright.async_api import async_playwright
+
+DEFAULT_WORKERS = 1
+
+
+async def _fill_form_async(page, row: dict, auto_solve: bool, captcha_fn=None) -> None:
+    """Async version of fill_form — works with async Playwright page."""
+    await page.wait_for_selector(".ant-form", timeout=30000)
+
+    # Dismiss popup modal
+    try:
+        close_btn = page.locator(
+            ".ant-modal-close, "
+            ".ant-modal-wrap button.ant-modal-close, "
+            "button[aria-label='Close']"
+        ).first
+        if await close_btn.count() and await close_btn.is_visible():
+            await close_btn.click(timeout=3000)
+            await page.wait_for_timeout(500)
+    except Exception:
+        pass
+    try:
+        modal = page.locator(".ant-modal-wrap").first
+        if await modal.count() and await modal.is_visible():
+            await page.keyboard.press("Escape")
+            await page.wait_for_timeout(500)
+    except Exception:
+        pass
+
+    # MST
+    mst = str(row.get("nbmst", "")).strip()
+    if mst:
+        inp = page.locator(
+            'input[id*="nbmst"], input[placeholder*="MST"]'
+        ).or_(
+            page.locator(".ant-form-item").filter(has_text="MST người bán").locator("input")
+        ).first
+        await inp.click(timeout=3000)
+        await inp.press("Meta+a")
+        await inp.press("Backspace")
+        await inp.fill(mst)
+
+    # Invoice type
+    lhdon = str(row.get("lhdon", "GTGT"))
+    lhdon_upper = lhdon.upper().strip() if lhdon else "GTGT"
+    label_text = INVOICE_TYPE_MAP.get(lhdon_upper, INVOICE_TYPE_MAP["GTGT"])
+    
+    # Check if we even need to click
+    current_val_loc = page.locator('#lhdon .ant-select-selection-selected-value, #lhdon .ant-select-selection-item').first
+    try:
+        current_val = await current_val_loc.inner_text(timeout=1000)
+        already_selected = (label_text.lower() in current_val.lower())
+    except:
+        already_selected = False
+
+    if not already_selected:
+        trigger = page.locator('#lhdon, .ant-form-item:has-text("Loại hóa đơn") .ant-select').first
+        await trigger.click(timeout=5000)
+        await page.wait_for_selector(".ant-select-dropdown-menu-item:visible, .ant-select-item-option:visible", timeout=5000)
+        
+        option = page.locator(
+            f'.ant-select-dropdown-menu-item[title*="{label_text}"], '
+            f'.ant-select-dropdown-menu-item:has-text("{label_text}"), '
+            f'.ant-select-item-option[title*="{label_text}"], '
+            f'.ant-select-item-option:has-text("{label_text}")'
+        ).first
+        
+        if await option.count():
+            await option.click()
+        else:
+            await page.locator(".ant-select-dropdown-menu-item, .ant-select-item-option").first.click()
+
+    # khhdon
+    khhdon = str(row.get("khhdon", "")).strip()
+    if khhdon:
+        inp = page.locator(
+            'input[id*="khhdon"], input[placeholder*="Ký hiệu"]'
+        ).or_(
+            page.locator(".ant-form-item").filter(has_text="Ký hiệu hóa đơn").locator("input")
+        ).first
+        await inp.click(timeout=3000)
+        await inp.press("Meta+a")
+        await inp.press("Backspace")
+        await inp.fill(khhdon)
+
+    # shdon
+    shdon = str(row.get("shdon", "")).strip()
+    if shdon:
+        inp = page.locator(
+            'input[id*="shdon"], input[placeholder*="Số hóa đơn"]'
+        ).or_(
+            page.locator(".ant-form-item").filter(has_text="Số hóa đơn").locator("input")
+        ).first
+        await inp.click(timeout=3000)
+        await inp.press("Meta+a")
+        await inp.press("Backspace")
+        await inp.fill(shdon)
+
+    # Number fields
+    for field_id, label, key in [
+        ("tgtthue", "Tổng tiền thuế", "tgtthue"),
+        ("tgtttbso", "Tổng tiền thanh toán", "tgtttbso"),
+    ]:
+        value = row.get(key)
+        if value is None or str(value).strip() in ("", "nan"):
+            continue
+        raw = str(value).replace(",", "").replace(" ", "").strip()
+        try:
+            raw = str(int(float(raw)))
+        except ValueError:
+            continue
+        inp = page.locator(f"input#{field_id}").first
+        if not await inp.count():
+            continue
+        await inp.fill(raw)
+        await inp.press("Tab")
+
+    # CAPTCHA — wait for the image to fully load first
+    captcha_img = page.locator(
+        "img[src*='captcha'], img[src*='Captcha'], "
+        ".ant-form-item:has-text('Mã captcha') img, "
+        "img[alt*='captcha']"
+    ).first
+    try:
+        await captcha_img.wait_for(state="visible", timeout=10000)
+    except Exception:
+        pass
+
+    if captcha_fn:
+        captcha_answer = await captcha_fn(page, auto_solve)
+    else:
+        captcha_answer = get_captcha_answer(page, auto_solve)
+
+    if captcha_answer:
+        captcha_inp = page.locator(
+            'input[id*="captcha"], input[placeholder*="captcha"], '
+            'input[placeholder*="Captcha"], input[placeholder*="mã"]'
+        ).or_(
+            page.locator(".ant-form-item").filter(has_text="Nhập mã captcha").locator("input")
+        ).first
+        await captcha_inp.click(timeout=3000)
+        await asyncio.sleep(0.1)
+        await captcha_inp.press("Meta+a")
+        await captcha_inp.press("Backspace")
+        await captcha_inp.type(captcha_answer, delay=50)
+
+    await page.locator(
+        'button[type="submit"]:has-text("Tìm kiếm"), button:has-text("Tìm kiếm")'
+    ).first.click()
+    
+    # DO NOT wait for networkidle (it hangs for 30s). Wait for any loading spinners to vanish.
+    await asyncio.sleep(1)
+    try:
+        spinner = page.locator('.ant-spin-spinning').first
+        if await spinner.is_visible():
+            await spinner.wait_for(state="hidden", timeout=30000)
+    except Exception:
+        pass
+    
+    await asyncio.sleep(0.5)
+
+    # Check for CAPTCHA error popups
+    err_text = page.locator('.ant-message-notice-content, .ant-modal-confirm-content, .ant-notification-notice-content, .ant-alert-error')
+    texts = await err_text.all_inner_texts()
+    for text in texts:
+        t = text.lower()
+        if "captcha" in t or "xác thực" in t or "không đúng" in t or "sai" in t:
+            raise ValueError(f"CAPTCHA Error or System Error: {text.strip()}")
+
+
+async def _process_row_async(
+    context, row: dict, row_num: int, total: int,
+    auto_solve: bool, captcha_fn=None,
+) -> dict:
+    """Process one row using the shared context (new tab per row)."""
+    last_error = ""
+
+    for attempt in range(1, MAX_CAPTCHA_RETRIES + 1):
+        if attempt > 1:
+            print(f"  [Row {row_num}] Retrying ({attempt}/{MAX_CAPTCHA_RETRIES})…")
+            await asyncio.sleep(0.5)  # slight backoff
+            
+        page = await context.new_page()
+        try:
+            await page.goto(LOOKUP_URL, wait_until="domcontentloaded", timeout=60000)
+            await _fill_form_async(page, row, auto_solve, captcha_fn=captcha_fn)
+
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            out = OUTPUT_DIR / f"row{row_num:04d}_{ts}.png"
+            await page.screenshot(path=str(out), full_page=True)
+            print(f"  [Row {row_num}] -> Screenshot: {out}")
+            return {"row": row_num, "status": "ok", "file": str(out)}
+
+        except Exception as exc:
+            last_error = str(exc)
+            print(f"  [Row {row_num}] [ERROR] {last_error}")
+            try:
+                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                err_out = OUTPUT_DIR / f"row{row_num:04d}_{ts}_error.png"
+                await page.screenshot(path=str(err_out), full_page=True)
+            except Exception:
+                pass
+        finally:
+            await page.close()
+
+    return {"row": row_num, "status": "error", "error": last_error}
+
+
+async def process_rows_async(
+    excel_path: str, auto_solve: bool, headless: bool,
+    captcha_fn=None, workers: int = DEFAULT_WORKERS,
+) -> str:
+    """Async entry point: one browser, N concurrent tabs."""
+    OUTPUT_DIR.mkdir(exist_ok=True)
+
+    print(f"\nReading: {excel_path}")
+    df = pd.read_excel(excel_path, header=0)
+    df.columns = [c.lower().strip() for c in df.columns]
+    if len(df) > 0 and str(df.iloc[0, 0]).strip().startswith("MST"):
+        df = df.iloc[1:].reset_index(drop=True)
+    df = df.dropna(how="all").reset_index(drop=True)
+    print(f"Found {len(df)} row(s). Columns: {list(df.columns)}")
+
+    print(f"Processing {len(df)} row(s) sequentially\n")
+
+    results: list[dict] = []
+
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(
+            headless=headless,
+            args=["--ignore-certificate-errors"],
+        )
+        context = await browser.new_context(
+            viewport={"width": 1400, "height": 900},
+            ignore_https_errors=True,
+        )
+
+        for idx, row_series in df.iterrows():
+            row = row_series.to_dict()
+            row_num = idx + 1
+
+            required = {k: str(row.get(k, "")).strip()
+                        for k in ("nbmst", "khhdon", "shdon", "tgtttbso")}
+            missing = [k for k, v in required.items() if not v or v == "nan"]
+            if missing:
+                print(f"[{row_num}/{len(df)}] SKIP — missing: {missing}")
+                results.append({"row": row_num, "status": "skip",
+                                 "error": f"missing {missing}"})
+                continue
+
+            print(
+                f"[{row_num}/{len(df)}] Processing: nbmst={row.get('nbmst')}  "
+                f"khhdon={row.get('khhdon')}  shdon={row.get('shdon')}"
+            )
+            
+            try:
+                res = await _process_row_async(
+                    context, row, row_num, len(df), auto_solve, captcha_fn,
+                )
+                results.append(res)
+            except Exception as e:
+                results.append({"row": row_num, "status": "error", "error": str(e)})
+
+        await browser.close()
+
+    results.sort(key=lambda r: r["row"])
+
+    embed_screenshots_in_input(excel_path, df, results)
+
+    print("\n" + "=" * 50)
+    ok_count = sum(1 for r in results if r["status"] == "ok")
+    print(f"Done — {ok_count}/{len(results)} succeeded")
+    for r in results:
+        sym    = {"ok": "✓", "error": "✗", "skip": "○"}.get(r["status"], "?")
+        detail = r.get("file") or r.get("error", "")
+        print(f"  {sym} Row {r['row']}: {detail}")
+
+    return excel_path
+
+
+def process_rows(
+    excel_path: str, auto_solve: bool, headless: bool,
+    captcha_fn=None, workers: int = DEFAULT_WORKERS,
+) -> str:
+    """Sync wrapper — used by CLI. Runs the async version internally."""
+    return asyncio.run(process_rows_async(
+        excel_path, auto_solve, headless, captcha_fn, workers,
+    ))
+
+
+# ── CLI ───────────────────────────────────────────────────────────────────────
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Auto-fill hoadondientu.gdt.gov.vn/lookup from Excel, save results with screenshots.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+    parser.add_argument("excel", help="Input .xlsx file")
+    parser.add_argument(
+        "--auto-captcha", action="store_true",
+        help="Use Claude AI to solve CAPTCHA (requires ANTHROPIC_API_KEY)",
+    )
+    parser.add_argument(
+        "--headless", action="store_true",
+        help="Run browser headlessly (default: visible window)",
+    )
+    args = parser.parse_args()
+
+    if not os.path.isfile(args.excel):
+        print(f"Error: file not found — {args.excel}", file=sys.stderr)
+        sys.exit(1)
+
+    if args.auto_captcha and not os.getenv("ANTHROPIC_API_KEY"):
+        print("Warning: ANTHROPIC_API_KEY not set — falling back to manual CAPTCHA.")
+
+    process_rows(args.excel, args.auto_captcha, args.headless)
+
+
+if __name__ == "__main__":
+    main()

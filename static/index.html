@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tra Cứu Hóa Đơn Tự Động</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css?v=2">
+</head>
+<body>
+    <div class="glass-bg"></div>
+    <div class="app-container">
+        <header>
+            <div class="logo">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                <h1>Công Cụ Hóa Đơn</h1>
+            </div>
+            <p class="subtitle">Tự động tra cứu hóa đơn điện tử hàng loạt nhanh chóng</p>
+        </header>
+
+        <main>
+            <section class="card guide-section">
+                <h2>1. Hướng dẫn sử dụng</h2>
+                <div class="guide-content" style="font-size: 0.95rem; color: rgba(255, 255, 255, 0.8); line-height: 1.6; margin-bottom: 0.5rem;">
+                    <p>Tool đọc dữ liệu từ file Excel. Bạn bắt buộc cần có dòng đầu tiên liệt kê chính xác các <strong>Mã Số Cột</strong> sau:</p>
+                    <ul style="margin-top: 0.5rem; margin-bottom: 1rem; padding-left: 1.5rem;">
+                        <li><code>nbmst</code>: Mã số thuế người bán (Bắt buộc)</li>
+                        <li><code>lhdon</code>: Loại hóa đơn (Mặc định Hóa đơn GTGT)</li>
+                        <li><code>khhdon</code>: Ký hiệu hóa đơn (Bắt buộc)</li>
+                        <li><code>shdon</code>: Số hóa đơn (Bắt buộc)</li>
+                        <li><code>tgtttbso</code>: Tổng tiền thanh toán (Bắt buộc)</li>
+                    </ul>
+                    <a href="/static/invoices_sample.xlsx" download style="display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(255, 255, 255, 0.1); padding: 0.5rem 1rem; border-radius: 6px; color: #fff; text-decoration: none; border: 1px solid rgba(255, 255, 255, 0.2); transition: background 0.3s;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        Tải file mẫu (Excel)
+                    </a>
+                </div>
+            </section>
+
+            <section class="card upload-section">
+                <h2>2. Thiết lập tác vụ</h2>
+                
+                <form id="uploadForm">
+                    <div class="file-drop-area" id="fileDropArea">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                        <p class="file-msg">Kéo & Thả file Excel (.xlsx) vào đây<br><span>hoặc click để chọn file</span></p>
+                        <input type="file" id="fileInput" name="file" accept=".xlsx" required>
+                    </div>
+
+                    <div class="options-group">
+                        <label class="toggle-control" style="margin-top: 1rem;">
+                            <input type="checkbox" name="headless" id="headless" checked>
+                            <span class="control"></span>
+                            <span class="label-text">Chạy ngầm (Ẩn trình duyệt)</span>
+                        </label>
+                    </div>
+
+                    <button type="submit" class="btn-primary" id="runBtn">
+                        <span>Bắt Đầu Tự Động Hóa</span>
+                        <div class="loader" id="btnLoader"></div>
+                    </button>
+                </form>
+            </section>
+
+            <section class="card terminal-section">
+                <div class="terminal-header">
+                    <div class="mac-dots">
+                        <span></span><span></span><span></span>
+                    </div>
+                    <span class="terminal-title">Nhật ký chạy</span>
+                    <a href="#" class="btn-download hidden" id="downloadBtn" download>Tải Kết Quả <span>↓</span></a>
+                </div>
+                <div class="terminal-body" id="terminalOutput">
+                    <div class="log-line text-muted">Đang chờ khởi tạo tác vụ...</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/static/app.js?v=3"></script>
+</body>
+</html>
