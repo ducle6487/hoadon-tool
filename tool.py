@@ -567,7 +567,8 @@ async def process_rows_async(
 
     MAX_CONCURRENT = 10
     print(f"Processing {len(df)} row(s) with {MAX_CONCURRENT} parallel tabs\n")
-
+    
+    start_time = time.time()
     results: list[dict] = []
     semaphore = asyncio.Semaphore(MAX_CONCURRENT)
 
@@ -618,8 +619,14 @@ async def process_rows_async(
     results.sort(key=lambda r: r["row"])
 
     print("\n" + "=" * 50)
+    end_time = time.time()
+    duration = end_time - start_time
+    minutes = int(duration // 60)
+    seconds = int(duration % 60)
+    
     ok_count = sum(1 for r in results if r["status"] == "ok")
-    print(f"Done — {ok_count}/{len(results)} succeeded")
+    print(f"Done — {ok_count}/{len(results)} succeeded!")
+    print(f"⏱️ Tổng thời gian xử lý: {minutes}p {seconds}s")
     for r in results:
         sym    = {"ok": "✓", "error": "✗", "skip": "○"}.get(r["status"], "?")
         detail = r.get("file") or r.get("error", "")
