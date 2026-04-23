@@ -81,30 +81,40 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function connectWebSocket() {
-        if (ws) ws.close();
-        ws = new WebSocket(`ws://${window.location.host}/ws`);
-        
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            if (data.type === 'progress') {
-                updateProgress(data.current, data.total);
-            } else if (data.type === 'log') {
-                let type = 'info';
-                if (data.msg.includes('[ERROR]')) type = 'error';
-                else if (data.msg.includes('✓') || data.msg.includes('Screenshot OK')) type = 'success';
-                addLog(data.msg, type);
-            } else if (data.type === 'done') {
-                addLog('\n>> QUÁ TRÌNH XỬ LÝ HOÀN TẤT THÀNH CÔNG', 'success');
-                downloadBtn.href = `/api/download?filepath=${encodeURIComponent(data.file)}`;
-                downloadBtn.classList.remove('hidden');
-                resetBtn();
-                stopTimer();
-            } else if (data.type === 'error') {
-                addLog(`\n>> QUÁ TRÌNH XỬ LÝ THẤT BẠI: ${data.msg}`, 'error');
-                resetBtn();
-                stopTimer();
-            }
-        };
+        return new Promise((resolve, reject) => {
+            if (ws) ws.close();
+            ws = new WebSocket(`ws://${window.location.host}/ws`);
+            
+            ws.onopen = () => {
+                console.log("WebSocket connected.");
+                resolve(ws);
+            };
+            
+            ws.onerror = (err) => {
+                console.error("WS Error:", err);
+                reject(err);
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'progress') {
+                    updateProgress(data.current, data.total);
+                } else if (data.type === 'log') {
+                    let type = 'info';
+                    if (data.msg.includes('[ERROR]')) type = 'error';
+                    else if (data.msg.includes('✓') || data.msg.includes('Screenshot OK')) type = 'success';
+                    addLog(data.msg, type);
+                } else if (data.type === 'done') {
+                    addLog('\n>> QUÁ TRÌNH XỬ LÝ HOÀN TẤT THÀNH CÔNG', 'success');
+                    downloadBtn.href = `/api/download?filepath=${encodeURIComponent(data.file)}`;
+                    downloadBtn.classList.remove('hidden');
+                    resetBtn();
+                } else if (data.type === 'error') {
+                    addLog(`\n>> QUÁ TRÌNH XỬ LÝ THẤT BẠI: ${data.msg}`, 'error');
+                    resetBtn();
+                }
+            };
+        });
     }
 
     function resetBtn() {
@@ -118,31 +128,36 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!fileInput.files.length) { alert('Vui lòng chọn một file Excel trước.'); return; }
 
         termOutput.innerHTML = '';
-        addLog('>> Đang khởi tạo công cụ (Tiến trình xử lý song song)...', 'info');
+        addLog('>> Đang kết nối đường truyền dữ liệu...', 'info');
         downloadBtn.classList.add('hidden');
         
         runBtn.disabled = true;
-        btnText.textContent = 'Đang xử lý...';
+        btnText.textContent = 'Khởi động...';
         btnLoader.style.display = 'block';
 
         progressContainer.classList.remove('hidden');
         updateProgress(0, 0);
-        etaValue.textContent = "Đang tính...";
         elapsedValue.textContent = "0s";
-        startTimer();
-
-        connectWebSocket();
-
-        const formData = new FormData();
-        formData.append('file', fileInput.files[0]);
-        formData.append('headless', document.getElementById('headless').checked);
 
         try {
+            // Wait for WebSocket to be really open
+            await connectWebSocket();
+            addLog('>> Đã kết nối. Bắt đầu truyền lệnh tới máy chủ...', 'info');
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('headless', document.getElementById('headless').checked);
+
             const res = await fetch('/api/run', { method: 'POST', body: formData });
             const data = await res.json();
-            if (data.error) { addLog(`LỖI: ${data.error}`, 'error'); resetBtn(); }
+            if (data.error) { 
+                addLog(`LỖI: ${data.error}`, 'error'); 
+                resetBtn(); 
+            } else {
+                 startTimer();
+            }
         } catch (error) {
-            addLog(`Yêu cầu thất bại: ${error}`, 'error');
+            addLog(`Không thể kết nối máy chủ: ${error}`, 'error');
             resetBtn();
         }
     });

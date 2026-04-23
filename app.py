@@ -58,6 +58,9 @@ async def run_tool(file: UploadFile = File(...), headless: bool = Form(False)):
 
     async def async_runner():
         global is_processing
+        # Give 2 seconds for WebSocket handshake to complete on the client side
+        await asyncio.sleep(2)
+        
         import builtins
         _original_print = builtins.print
         def _ws_print(*args, **kwargs):
