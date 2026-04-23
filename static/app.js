@@ -65,8 +65,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Each attempt ~10s. For 8 concurrent tabs:
         const remaining = total - current;
         if (remaining > 0) {
-            const avgTimePerRowWithRetries = 30; // 10s * 3 attempts
-            const totalSecondsRemaining = (remaining / 8) * avgTimePerRowWithRetries;
+            // Updated calculation for 5 tabs (MAX_CONCURRENT=5)
+            const avgTimePerRow = 9; // ~9s avg to finish within 7m for 240 rows
+            const totalSecondsRemaining = (remaining / 5) * avgTimePerRow;
             
             const m = Math.floor(totalSecondsRemaining / 60);
             const s = Math.round(totalSecondsRemaining % 60);

@@ -41,7 +41,7 @@ from playwright.sync_api import sync_playwright, Page, Locator
 
 OUTPUT_DIR = Path("output")
 LOOKUP_URL = "https://hoadondientu.gdt.gov.vn/"
-MAX_CAPTCHA_RETRIES = 5
+MAX_CAPTCHA_RETRIES = 10
 
 # Thumbnail size embedded in the results Excel
 THUMB_W = 1920   # pixels wide
@@ -585,8 +585,8 @@ async def process_rows_async(
     df = df.dropna(how="all").reset_index(drop=True)
     print(f"Found {len(df)} row(s). Columns: {list(df.columns)}")
 
-    MAX_CONCURRENT = 8
-    print(f"Processing {len(df)} row(s) with {MAX_CONCURRENT} parallel tabs (Balanced Mode)\n")
+    MAX_CONCURRENT = 5
+    print(f"Processing {len(df)} row(s) with {MAX_CONCURRENT} parallel tabs (Stable High-Speed Mode)\n")
     
     start_time = time.time()
     results: list[dict] = []
@@ -603,11 +603,11 @@ async def process_rows_async(
         )
 
         async def _worker(row: dict, row_num: int, total: int) -> dict:
-            # Jittered start to avoid hitting the server as a "wave"
-            await asyncio.sleep(random.uniform(0.5, 3.0))
+            # Short jitter to spread initial load
+            await asyncio.sleep(random.uniform(0.1, 1.5))
             async with semaphore:
-                # Brief pause inside semaphore to avoid simultaneous page.goto
-                await asyncio.sleep(random.uniform(0.2, 1.0))
+                # Minimum pause inside semaphore to avoid simultaneous page.goto
+                await asyncio.sleep(random.uniform(0.1, 0.5))
                 print(
                     f"[{row_num}/{total}] Processing: nbmst={row.get('nbmst')}  "
                     f"khhdon={row.get('khhdon')}  shdon={row.get('shdon')}"
