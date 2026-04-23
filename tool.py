@@ -41,7 +41,7 @@ from playwright.sync_api import sync_playwright, Page, Locator
 
 OUTPUT_DIR = Path("output")
 LOOKUP_URL = "https://hoadondientu.gdt.gov.vn/"
-MAX_CAPTCHA_RETRIES = 10
+MAX_CAPTCHA_RETRIES = 20
 
 # Thumbnail size embedded in the results Excel
 THUMB_W = 1920   # pixels wide
@@ -766,13 +766,11 @@ async def process_rows_async(
     ok_count = sum(1 for r in results if r["status"] == "ok")
     print(f"Done — {ok_count}/{len(results)} succeeded!")
     print(f"⏱️ Tổng thời gian xử lý: {minutes}p {seconds}s")
-    for r in results:
-        sym    = {"ok": "✓", "error": "✗", "skip": "○"}.get(r["status"], "?")
-        detail = r.get("file") or r.get("error", "")
-        print(f"  {sym} Row {r['row']}: {detail}")
-
     import shutil
     import os
+    summary_path = OUTPUT_DIR / "chitiét_xuly.xlsx"
+    pd.DataFrame(results).to_excel(str(summary_path), index=False)
+    
     zip_path = str(Path("output_images").absolute())
     shutil.make_archive(zip_path, 'zip', str(OUTPUT_DIR))
     
