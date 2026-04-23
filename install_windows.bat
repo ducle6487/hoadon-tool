@@ -3,44 +3,46 @@ CHCP 65001 >NUL
 Title Cai Dat Auto Hoa Don Tool
 
 echo ==============================================================
-echo        MAU CAI DAT CONG CU AUTO HOA DON CHO WINDOWS
+echo        CAI DAT CONG CU AUTO HOA DON CHO WINDOWS
 echo ==============================================================
 echo.
 
-echo Kiem tra nen tang Python...
+echo [1/3] Kiem tra va cai dat Python tu dong...
 python --version >nul 2>&1
 IF %ERRORLEVEL% NEQ 0 (
-    echo ----------------------------------------------------
-    echo [CANH BAO] May tinh cua ban chua cai dat Python!
-    echo Dang thao tac mo trinh duyet de tai file cai dat Python...
+    echo May tinh chua co Python. Dang tu dong bat dau qua trinh tai xuong...
+    echo (Vui long khong tat cua so nay, he thong dang lam viec het suc minh!)
     echo.
-    echo   *** LUU Y CUC KY QUAN TRONG ***
-    echo O bang cai dat Python hien len, ban BAT BUOC phai tich chon o:
-    echo "[x] Add Python.exe to PATH" o muc duoi cung!
-    echo Sau do moi bam Install Now. Neu khong Tool se khong chay duoc!
-    echo ----------------------------------------------------
-    start https://www.python.org/ftp/python/3.11.8/python-3.11.8-amd64.exe
-    echo Sau khi file tai ve, hay cai dat roi MO LAI file nay nhe!
-    pause
-    exit /b
+    curl -# -o python_installer.exe https://www.python.org/ftp/python/3.11.8/python-3.11.8-amd64.exe
+    
+    echo Dang hoan tat cai dat thong minh (Giau kin, tu dong 100%%)...
+    start /wait python_installer.exe /quiet InstallAllUsers=0 PrependPath=1 Include_test=0
+    del python_installer.exe
+    
+    :: Nhan dien PATH ngay lap tuc trong phien hien tai
+    SET "PATH=%PATH%;%LocalAppData%\Programs\Python\Python311\;%LocalAppData%\Programs\Python\Python311\Scripts\"
+    
+    echo Cai dat Python hoan tat thanh cong!
+) ELSE (
+    echo Da phat hien Python tren he thong!
 )
 
 echo.
 echo ----------------------------------------------------
-echo [1/2] Dang cai dat cac phan mem va thu vien loi...
+echo [2/3] Dang cai dat cac phan mem va thu vien loi...
 echo ----------------------------------------------------
 pip install -r requirements.txt
 
 echo.
 echo ----------------------------------------------------
-echo [2/2] Dang tai trinh duyet gia lap Playwright...
+echo [3/3] Dang tai trinh duyet gia lap Playwright...
 echo ----------------------------------------------------
 playwright install chromium
 
 echo.
 echo ==============================================================
-echo  [HOAN TAT] Cai dat thanh cong ruc ro!
+echo  [HOAN TAT] Cai dat thanh cong cham diem 10!
 echo  Bay gio ban chi can nhap dup chuot vao file 'start_windows.bat' la xai thoi.
-echo  Ban co the tat cua so nay.
+echo  Ban co the TẮT cua so MAU DEN nay.
 echo ==============================================================
 pause
