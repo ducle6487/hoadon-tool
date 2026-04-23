@@ -472,18 +472,20 @@ async def _fill_form_async(page, row: dict, auto_solve: bool, captcha_fn=None) -
     else:
         captcha_answer = get_captcha_answer(page, auto_solve)
 
-    if captcha_answer:
-        captcha_inp = page.locator(
-            'input[id*="captcha"], input[placeholder*="captcha"], '
-            'input[placeholder*="Captcha"], input[placeholder*="mã"]'
-        ).or_(
-            page.locator(".ant-form-item").filter(has_text="Nhập mã captcha").locator("input")
-        ).first
-        await captcha_inp.click(timeout=3000)
-        await asyncio.sleep(0.1)
-        await captcha_inp.press("Meta+a")
-        await captcha_inp.press("Backspace")
-        await captcha_inp.type(captcha_answer, delay=50)
+    if not captcha_answer:
+        raise ValueError("Không thể lấy được mã Captcha. Đang thử lại...")
+
+    captcha_inp = page.locator(
+        'input[id*="captcha"], input[placeholder*="captcha"], '
+        'input[placeholder*="Captcha"], input[placeholder*="mã"]'
+    ).or_(
+        page.locator(".ant-form-item").filter(has_text="Nhập mã captcha").locator("input")
+    ).first
+    
+    await captcha_inp.click(timeout=3000)
+    await asyncio.sleep(0.1)
+    await captcha_inp.fill("") # Clear first
+    await captcha_inp.type(captcha_answer, delay=30)
 
     await page.locator(
         'button[type="submit"]:has-text("Tìm kiếm"), button:has-text("Tìm kiếm")'
