@@ -59,6 +59,20 @@
                         <span>Bắt Đầu Tự Động Hóa</span>
                         <div class="loader" id="btnLoader"></div>
                     </button>
+                    
+                    <div id="progressContainer" class="progress-container hidden">
+                        <div class="progress-info">
+                            <span class="progress-label" id="progressLabel">Đang xử lý: 0/0 dòng</span>
+                            <span class="progress-percentage" id="progressPercent">0%</span>
+                        </div>
+                        <div class="progress-track">
+                            <div class="progress-fill" id="progressFill"></div>
+                        </div>
+                        <div class="eta-container">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                            <span>Thời gian dự kiến còn lại: <span class="eta-value" id="etaValue">Đang tính...</span></span>
+                        </div>
+                    </div>
                 </form>
             </section>
 

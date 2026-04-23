@@ -93,9 +93,13 @@ async def run_tool(
 
                 return ""
 
+            async def progress_cb(current, total):
+                await log_queue.put({"type": "progress", "current": current, "total": total})
+
             res = await tool.process_rows_async(
                 str(filepath), auto_solve=True, headless=headless,
                 captcha_fn=auto_captcha_fn,
+                progress_callback=progress_cb
             )
             await log_queue.put({"type": "done", "file": res})
         except Exception as e:

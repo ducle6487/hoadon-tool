@@ -45,16 +45,49 @@ document.addEventListener('DOMContentLoaded', () => {
         termOutput.scrollTop = termOutput.scrollHeight;
     }
 
+    let rowFinished = 0;
+
+    const progressContainer = document.getElementById('progressContainer');
+    const progressLabel = document.getElementById('progressLabel');
+    const progressPercent = document.getElementById('progressPercent');
+    const progressFill = document.getElementById('progressFill');
+    const etaValue = document.getElementById('etaValue');
+
+    function updateProgress(current, total) {
+        rowFinished = current;
+        const percent = Math.min(Math.round((current / total) * 100), 100);
+        
+        progressLabel.textContent = `Đang xử lý: ${current}/${total} hóa đơn`;
+        progressPercent.textContent = `${percent}%`;
+        progressFill.style.width = `${percent}%`;
+
+        // ETA logic: Assuming 3 attempts total (1 load + 2 retries) per row if requested.
+        // Each attempt ~10s. For 8 concurrent tabs:
+        const remaining = total - current;
+        if (remaining > 0) {
+            const avgTimePerRowWithRetries = 30; // 10s * 3 attempts
+            const totalSecondsRemaining = (remaining / 8) * avgTimePerRowWithRetries;
+            
+            const m = Math.floor(totalSecondsRemaining / 60);
+            const s = Math.round(totalSecondsRemaining % 60);
+            etaValue.textContent = `${m}p ${s}s`;
+        } else {
+            etaValue.textContent = "Đã xong!";
+        }
+    }
+
     function connectWebSocket() {
         if (ws) ws.close();
         ws = new WebSocket(`ws://${window.location.host}/ws`);
         
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
-            if (data.type === 'log') {
+            if (data.type === 'progress') {
+                updateProgress(data.current, data.total);
+            } else if (data.type === 'log') {
                 let type = 'info';
                 if (data.msg.includes('[ERROR]')) type = 'error';
-                else if (data.msg.includes('✓') || data.msg.includes('Screenshot')) type = 'success';
+                else if (data.msg.includes('✓') || data.msg.includes('Screenshot OK')) type = 'success';
                 addLog(data.msg, type);
             } else if (data.type === 'done') {
                 addLog('\n>> QUÁ TRÌNH XỬ LÝ HOÀN TẤT THÀNH CÔNG', 'success');
@@ -72,6 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btnLoader.style.display = 'none';
         btnText.textContent = 'Bắt Đầu Tự Động Hóa';
         runBtn.disabled = false;
+        // Don't hide progress immediately so user can see 100%
     }
 
     form.addEventListener('submit', async (e) => {
@@ -79,12 +113,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!fileInput.files.length) { alert('Vui lòng chọn một file Excel trước.'); return; }
 
         termOutput.innerHTML = '';
-        addLog('>> Đang khởi tạo công cụ (Tiến trình xử lý lần lượt)...', 'info');
+        addLog('>> Đang khởi tạo công cụ (Tiến trình xử lý song song)...', 'info');
         downloadBtn.classList.add('hidden');
         
         runBtn.disabled = true;
         btnText.textContent = 'Đang xử lý...';
         btnLoader.style.display = 'block';
+
+        progressContainer.classList.remove('hidden');
+        updateProgress(0, 0);
+        etaValue.textContent = "Đang tính...";
 
         connectWebSocket();
 

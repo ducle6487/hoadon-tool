@@ -572,6 +572,7 @@ async def _process_row_async(
 async def process_rows_async(
     excel_path: str, auto_solve: bool, headless: bool,
     captcha_fn=None, workers: int = DEFAULT_WORKERS,
+    progress_callback=None
 ) -> str:
     """Async entry point: one browser, N concurrent tabs."""
     OUTPUT_DIR.mkdir(exist_ok=True)
@@ -612,10 +613,15 @@ async def process_rows_async(
                     f"khhdon={row.get('khhdon')}  shdon={row.get('shdon')}"
                 )
                 try:
-                    return await _process_row_async(
+                    res = await _process_row_async(
                         context, row, row_num, total, auto_solve, captcha_fn,
                     )
+                    if progress_callback:
+                        await progress_callback(row_num, total)
+                    return res
                 except Exception as e:
+                    if progress_callback:
+                        await progress_callback(row_num, total)
                     return {"row": row_num, "status": "error", "error": str(e)}
 
         tasks = []
