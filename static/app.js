@@ -45,13 +45,25 @@ document.addEventListener('DOMContentLoaded', () => {
         termOutput.scrollTop = termOutput.scrollHeight;
     }
 
-    let rowFinished = 0;
+    let startTime = null;
+    let elapsedInterval = null;
 
-    const progressContainer = document.getElementById('progressContainer');
-    const progressLabel = document.getElementById('progressLabel');
-    const progressPercent = document.getElementById('progressPercent');
-    const progressFill = document.getElementById('progressFill');
-    const etaValue = document.getElementById('etaValue');
+    const elapsedValue = document.getElementById('elapsedValue');
+
+    function startTimer() {
+        startTime = Date.now();
+        if (elapsedInterval) clearInterval(elapsedInterval);
+        elapsedInterval = setInterval(() => {
+            const diff = Math.floor((Date.now() - startTime) / 1000);
+            const m = Math.floor(diff / 60);
+            const s = diff % 60;
+            elapsedValue.textContent = m > 0 ? `${m}p ${s}s` : `${s}s`;
+        }, 1000);
+    }
+
+    function stopTimer() {
+        if (elapsedInterval) clearInterval(elapsedInterval);
+    }
 
     function updateProgress(current, total) {
         rowFinished = current;
@@ -66,17 +78,18 @@ document.addEventListener('DOMContentLoaded', () => {
         progressPercent.textContent = `${percent}%`;
         progressFill.style.width = `${percent}%`;
 
-        // ETA logic: Assuming 5 tabs
+        // ETA logic: Now assuming 10 tabs for HALF processing time
         const remaining = total - current;
         if (remaining > 0) {
             const avgTimePerRow = 9; 
-            const totalSecondsRemaining = (remaining / 5) * avgTimePerRow;
+            const totalSecondsRemaining = (remaining / 10) * avgTimePerRow;
             
             const m = Math.floor(totalSecondsRemaining / 60);
             const s = Math.round(totalSecondsRemaining % 60);
             etaValue.textContent = `${m}p ${s}s`;
         } else {
             etaValue.textContent = "Đã xong!";
+            stopTimer();
         }
     }
 
@@ -98,9 +111,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 downloadBtn.href = `/api/download?filepath=${encodeURIComponent(data.file)}`;
                 downloadBtn.classList.remove('hidden');
                 resetBtn();
+                stopTimer();
             } else if (data.type === 'error') {
                 addLog(`\n>> QUÁ TRÌNH XỬ LÝ THẤT BẠI: ${data.msg}`, 'error');
                 resetBtn();
+                stopTimer();
             }
         };
     }
@@ -109,7 +124,6 @@ document.addEventListener('DOMContentLoaded', () => {
         btnLoader.style.display = 'none';
         btnText.textContent = 'Bắt Đầu Tự Động Hóa';
         runBtn.disabled = false;
-        // Don't hide progress immediately so user can see 100%
     }
 
     form.addEventListener('submit', async (e) => {
@@ -127,6 +141,8 @@ document.addEventListener('DOMContentLoaded', () => {
         progressContainer.classList.remove('hidden');
         updateProgress(0, 0);
         etaValue.textContent = "Đang tính...";
+        elapsedValue.textContent = "0s";
+        startTimer();
 
         connectWebSocket();
 

@@ -509,5 +509,21 @@ main {
     font-size: 1.1rem;
 }
 
+.elapsed-container {
+    margin-top: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    padding: 0.5rem 0.75rem;
+}
+
+.elapsed-value {
+    color: var(--text-primary);
+    font-family: monospace;
+    font-weight: 600;
+}
+
 /* Utils */
 .hidden { display: none !important; }
