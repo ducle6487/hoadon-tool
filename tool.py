@@ -602,8 +602,8 @@ async def process_rows_async(
     df = df.dropna(how="all").reset_index(drop=True)
     print(f"Found {len(df)} row(s). Columns: {list(df.columns)}")
 
-    MAX_CONCURRENT = 15
-    print(f"Processing {len(df)} row(s) with {MAX_CONCURRENT} persistent tabs (Balanced High-Speed Mode)\n")
+    MAX_CONCURRENT = 30
+    print(f"Processing {len(df)} row(s) with {MAX_CONCURRENT} persistent tabs (EXTREME SPEED Mode)\n")
     
     start_time = time.time()
     results: list[dict] = []
@@ -619,7 +619,7 @@ async def process_rows_async(
         async def persistent_worker(worker_id):
             nonlocal completed_count
             # Staggered startup to avoid CPU/Network spikes
-            await asyncio.sleep(worker_id * 0.2)
+            await asyncio.sleep(worker_id * 0.1)
             
             context = await browser.new_context(viewport={"width": 1400, "height": 900}, ignore_https_errors=True)
             page = await context.new_page()
@@ -663,7 +663,7 @@ async def process_rows_async(
                         sh_val = "".join(c for c in str(row.get("shdon","")) if c.isalnum())
                         out = OUTPUT_DIR / f"Row{row_num:04d}_{kh_val}_{sh_val}.png"
                         
-                        await page.screenshot(path=str(out), full_page=True)
+                        await page.screenshot(path=str(out), full_page=False)
                         results.append({"row": row_num, "status": "ok", "file": str(out)})
                         success = True
                         break
