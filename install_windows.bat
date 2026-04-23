@@ -1,5 +1,6 @@
 @echo off
 CHCP 65001 >NUL
+cd /d "%~dp0"
 Title Cai Dat Auto Hoa Don Tool
 
 echo ==============================================================
@@ -13,11 +14,11 @@ IF %ERRORLEVEL% NEQ 0 (
     echo May tinh chua co Python. Dang tu dong bat dau qua trinh tai xuong...
     echo (Vui long khong tat cua so nay, he thong dang lam viec het suc minh!)
     echo.
-    curl -# -o python_installer.exe https://www.python.org/ftp/python/3.11.8/python-3.11.8-amd64.exe
+    curl -L -o python_installer.exe https://www.python.org/ftp/python/3.11.8/python-3.11.8-amd64.exe
     
     echo Dang hoan tat cai dat thong minh (Giau kin, tu dong 100%%)...
-    start /wait python_installer.exe /quiet InstallAllUsers=0 PrependPath=1 Include_test=0
-    del python_installer.exe
+    start /wait "" "%~dp0python_installer.exe" /quiet InstallAllUsers=0 PrependPath=1 Include_test=0
+    del "%~dp0python_installer.exe"
     
     :: Nhan dien PATH ngay lap tuc trong phien hien tai
     SET "PATH=%PATH%;%LocalAppData%\Programs\Python\Python311\;%LocalAppData%\Programs\Python\Python311\Scripts\"

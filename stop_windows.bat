@@ -1,5 +1,6 @@
 @echo off
 CHCP 65001 >NUL
+cd /d "%~dp0"
 Title Tat Auto Hoa Don Tool
 
 echo ==============================================================
