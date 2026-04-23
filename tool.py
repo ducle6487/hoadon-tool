@@ -623,12 +623,9 @@ async def process_rows_async(
             context = await browser.new_context(viewport={"width": 1400, "height": 900}, ignore_https_errors=True)
             page = await context.new_page()
 
-            # TURBO TECHNIQUE 1: Block heavy/unnecessary resources
+            # TURBO TECHNIQUE 1: Block only the HEAVIEST unnecessary resources
             async def block_assets(route):
                 if route.request.resource_type in ["font", "media"]:
-                    await route.abort()
-                elif route.request.resource_type == "image" and "captcha" not in route.request.url.lower():
-                    # Block images except captcha to save bandwidth
                     await route.abort()
                 else:
                     await route.continue_()
