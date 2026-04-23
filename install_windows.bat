@@ -24,11 +24,15 @@ echo Dang hoan tat cai dat thong minh (Giau kin, tu dong 100%%)...
 start /wait "" "%~dp0python_installer.exe" /quiet InstallAllUsers=0 PrependPath=1 Include_test=0
 del "%~dp0python_installer.exe"
 
-:: Nhan dien PATH ngay lap tuc trong phien hien tai
-SET "PATH=%PATH%;%LocalAppData%\Programs\Python\Python311\;%LocalAppData%\Programs\Python\Python311\Scripts\"
-
-echo Cai dat Python hoan tat thanh cong!
-GOTO INSTALL_DEPS
+    echo.
+    echo ====================================================================
+    echo [QUAN TRONG] CAI DAT PYTHON BUOC 1 DA THANH CONG!
+    echo De he thong nhan dien Python moi, ban BAT BUOC PHAI:
+    echo 1. TAT cua so nay bang cach bam dau cheo (X) tren cung.
+    echo 2. Nhan dup chuot de MO LAI file 'install_windows.bat' nay lan nua.
+    echo ====================================================================
+    pause
+    exit /b
 
 :DOWNLOAD_FAILED
 echo.
