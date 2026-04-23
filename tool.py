@@ -550,8 +550,8 @@ async def _process_row_async(
             sh_val = "".join(c for c in sh_val if c.isalnum())
             out = OUTPUT_DIR / f"Row{row_num:04d}_{kh_val}_{sh_val}.png"
             
-            # Fast screenshot (not full page) to save time
-            await page.screenshot(path=str(out), full_page=False)
+            # Screenshot OK
+            await page.screenshot(path=str(out), full_page=True)
             print(f"  [Row {row_num}] -> Screenshot OK")
             return {"row": row_num, "status": "ok", "file": str(out)}
 
