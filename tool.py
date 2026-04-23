@@ -47,12 +47,14 @@ THUMB_W = 1920   # pixels wide
 THUMB_H = 1080   # pixels tall (max — aspect ratio is preserved)
 
 INVOICE_TYPE_MAP = {
-    "GTGT":   "Hóa đơn giá trị gia tăng",
-    "HDBH":   "Hóa đơn bán hàng",
-    "HBBTSC": "Hóa đơn bán tài sản công",
-    "HDDTQG": "Hóa đơn bán hàng dự trữ quốc gia",
-    "HDK":    "Hóa đơn khác",
-    "CT":     "Chứng từ được in, phát hàng, sử dụng và quản lý như hóa đơn",
+    "GTGT":    "giá trị gia tăng",
+    "HDBH":    "Hóa đơn bán hàng",
+    "HBBTSC":  "bán tài sản công",
+    "HDDTQG":  "dự trữ quốc gia",
+    "HDK":     "Hóa đơn khác",
+    "CT":      "phát hành, sử dụng và quản lý như hóa đơn",
+    "GTGTMTT": "giá trị gia tăng khởi tạo từ máy tính tiền",
+    "HDBHMTT": "bán hàng khởi tạo từ máy tính tiền",
 }
 
 # ── CAPTCHA helpers ───────────────────────────────────────────────────────────
