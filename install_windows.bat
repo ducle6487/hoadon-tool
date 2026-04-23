@@ -14,8 +14,18 @@ IF %ERRORLEVEL% NEQ 0 (
     echo May tinh chua co Python. Dang tu dong bat dau qua trinh tai xuong...
     echo (Vui long khong tat cua so nay, he thong dang lam viec het suc minh!)
     echo.
-    curl -L -o python_installer.exe https://www.python.org/ftp/python/3.11.8/python-3.11.8-amd64.exe
+    echo Dang tai trinh cai dat ve may...
+    powershell -Command "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.11.8/python-3.11.8-amd64.exe' -OutFile 'python_installer.exe'"
     
+    IF NOT EXIST "python_installer.exe" (
+        echo.
+        echo X_X [LOI MANG] Khong the tai duoc file cai dat Python tu dong. 
+        echo Nguyen nhan thuong la do Firewall hoac mang Internet qua yeu.
+        echo Giai phap: Ban thong cam su dung file "start_windows.bat" khong the tu tao duoc Python, ma hay mo Google, tu tai va cai dat Python 3.11 (nho check Add to PATH) nhe.
+        pause
+        exit /b
+    )
+
     echo Dang hoan tat cai dat thong minh (Giau kin, tu dong 100%%)...
     start /wait "" "%~dp0python_installer.exe" /quiet InstallAllUsers=0 PrependPath=1 Include_test=0
     del "%~dp0python_installer.exe"
