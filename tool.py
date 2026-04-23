@@ -584,8 +584,8 @@ async def process_rows_async(
     df = df.dropna(how="all").reset_index(drop=True)
     print(f"Found {len(df)} row(s). Columns: {list(df.columns)}")
 
-    MAX_CONCURRENT = 12
-    print(f"Processing {len(df)} row(s) with {MAX_CONCURRENT} parallel tabs (TURBO MODE)\n")
+    MAX_CONCURRENT = 8
+    print(f"Processing {len(df)} row(s) with {MAX_CONCURRENT} parallel tabs (Balanced Mode)\n")
     
     start_time = time.time()
     results: list[dict] = []
@@ -601,9 +601,12 @@ async def process_rows_async(
             ignore_https_errors=True,
         )
 
-        async def _worker(row: dict, row_num: int, total: int, stagger: float) -> dict:
-            await asyncio.sleep(stagger)  # stagger launch to avoid rate-limit
+        async def _worker(row: dict, row_num: int, total: int) -> dict:
+            # Jittered start to avoid hitting the server as a "wave"
+            await asyncio.sleep(random.uniform(0.5, 3.0))
             async with semaphore:
+                # Brief pause inside semaphore to avoid simultaneous page.goto
+                await asyncio.sleep(random.uniform(0.2, 1.0))
                 print(
                     f"[{row_num}/{total}] Processing: nbmst={row.get('nbmst')}  "
                     f"khhdon={row.get('khhdon')}  shdon={row.get('shdon')}"
@@ -629,9 +632,7 @@ async def process_rows_async(
                                  "error": f"missing {missing}"})
                 continue
 
-            # Only stagger the first MAX_CONCURRENT tasks to avoid CPU spike at start
-            stagger = (len(tasks) * 0.3) if len(tasks) < MAX_CONCURRENT else 0
-            tasks.append(_worker(row, row_num, len(df), stagger=stagger))
+            tasks.append(_worker(row, row_num, len(df)))
 
         results.extend(await asyncio.gather(*tasks))
 
