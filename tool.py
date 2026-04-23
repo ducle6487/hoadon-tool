@@ -558,7 +558,7 @@ async def process_rows_async(
     df = df.dropna(how="all").reset_index(drop=True)
     print(f"Found {len(df)} row(s). Columns: {list(df.columns)}")
 
-    MAX_CONCURRENT = 5
+    MAX_CONCURRENT = 10
     print(f"Processing {len(df)} row(s) with {MAX_CONCURRENT} parallel tabs\n")
 
     results: list[dict] = []
