@@ -23,6 +23,7 @@ import argparse
 import base64
 import io
 import os
+import random
 import sys
 import time
 from datetime import datetime
@@ -499,11 +500,13 @@ async def _fill_form_async(page, row: dict, auto_solve: bool, captcha_fn=None) -
     
     await asyncio.sleep(0.5)
 
-    # Check for CAPTCHA error popups
+    # Check for CAPTCHA error popups and Network Error toast
     err_text = page.locator('.ant-message-notice-content, .ant-modal-confirm-content, .ant-notification-notice-content, .ant-alert-error')
     texts = await err_text.all_inner_texts()
     for text in texts:
         t = text.lower()
+        if "network error" in t or "network" in t and "error" in t:
+            raise ConnectionError(f"Network Error from server: {text.strip()}")
         if "captcha" in t or "xác thực" in t or "không đúng" in t or "sai" in t:
             raise ValueError(f"CAPTCHA Error or System Error: {text.strip()}")
 
@@ -517,8 +520,9 @@ async def _process_row_async(
 
     for attempt in range(1, MAX_CAPTCHA_RETRIES + 1):
         if attempt > 1:
-            print(f"  [Row {row_num}] Retrying ({attempt}/{MAX_CAPTCHA_RETRIES})…")
-            await asyncio.sleep(0.5)  # slight backoff
+            backoff = 2.0 * attempt + random.random() * 2
+            print(f"  [Row {row_num}] Retrying ({attempt}/{MAX_CAPTCHA_RETRIES}) after {backoff:.1f}s…")
+            await asyncio.sleep(backoff)
             
         page = await context.new_page()
         try:
@@ -537,6 +541,9 @@ async def _process_row_async(
         except Exception as exc:
             last_error = str(exc)
             print(f"  [Row {row_num}] [ERROR] {last_error}")
+            # Network Error from server — wait longer before retry
+            if "network" in last_error.lower() or "timeout" in last_error.lower():
+                await asyncio.sleep(3 + random.random() * 3)
         finally:
             await page.close()
 
@@ -558,7 +565,7 @@ async def process_rows_async(
     df = df.dropna(how="all").reset_index(drop=True)
     print(f"Found {len(df)} row(s). Columns: {list(df.columns)}")
 
-    MAX_CONCURRENT = 10
+    MAX_CONCURRENT = 5
     print(f"Processing {len(df)} row(s) with {MAX_CONCURRENT} parallel tabs\n")
 
     results: list[dict] = []
@@ -574,7 +581,8 @@ async def process_rows_async(
             ignore_https_errors=True,
         )
 
-        async def _worker(row: dict, row_num: int, total: int) -> dict:
+        async def _worker(row: dict, row_num: int, total: int, stagger: float) -> dict:
+            await asyncio.sleep(stagger)  # stagger launch to avoid rate-limit
             async with semaphore:
                 print(
                     f"[{row_num}/{total}] Processing: nbmst={row.get('nbmst')}  "
@@ -601,7 +609,7 @@ async def process_rows_async(
                                  "error": f"missing {missing}"})
                 continue
 
-            tasks.append(_worker(row, row_num, len(df)))
+            tasks.append(_worker(row, row_num, len(df), stagger=len(tasks) * 0.5))
 
         results.extend(await asyncio.gather(*tasks))
 
