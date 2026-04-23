@@ -603,67 +603,83 @@ async def process_rows_async(
     print(f"Found {len(df)} row(s). Columns: {list(df.columns)}")
 
     MAX_CONCURRENT = 10
-    print(f"Processing {len(df)} row(s) with {MAX_CONCURRENT} parallel tabs (Ultra High-Speed Mode)\n")
+    print(f"Processing {len(df)} row(s) with {MAX_CONCURRENT} persistent tabs (Hyper-Speed Mode)\n")
     
     start_time = time.time()
     results: list[dict] = []
-    semaphore = asyncio.Semaphore(MAX_CONCURRENT)
+    queue = asyncio.Queue()
+    for idx, row_series in df.iterrows():
+        queue.put_nowait((idx + 1, row_series.to_dict()))
+
+    completed_count = 0
 
     async with async_playwright() as pw:
-        browser = await pw.chromium.launch(
-            headless=headless,
-            args=["--ignore-certificate-errors"],
-        )
-        context = await browser.new_context(
-            viewport={"width": 1400, "height": 900},
-            ignore_https_errors=True,
-        )
-
-        completed_count = 0
-
-        async def _worker(row: dict, row_num: int, total: int) -> dict:
+        browser = await pw.chromium.launch(headless=headless, args=["--ignore-certificate-errors"])
+        
+        async def persistent_worker(worker_id):
             nonlocal completed_count
-            # Short jitter to spread initial load
-            await asyncio.sleep(random.uniform(0.1, 1.5))
-            async with semaphore:
-                # Minimum pause inside semaphore to avoid simultaneous page.goto
-                await asyncio.sleep(random.uniform(0.1, 0.5))
-                print(
-                    f"[{row_num}/{total}] Processing: nbmst={row.get('nbmst')}  "
-                    f"khhdon={row.get('khhdon')}  shdon={row.get('shdon')}"
-                )
+            context = await browser.new_context(viewport={"width": 1400, "height": 900}, ignore_https_errors=True)
+            page = await context.new_page()
+            # Initial load
+            try: await page.goto(LOOKUP_URL, wait_until="domcontentloaded", timeout=60000)
+            except: pass
+
+            while True:
                 try:
-                    res = await _process_row_async(
-                        context, row, row_num, total, auto_solve, captcha_fn,
-                    )
+                    # Get next task from queue
+                    if queue.empty(): break
+                    row_num, row = await queue.get()
+                except: break
+
+                # Validation
+                required = {k: str(row.get(k, "")).strip() for k in ("nbmst", "khhdon", "shdon", "tgtttbso")}
+                missing = [k for k, v in required.items() if not v or v == "nan"]
+                if missing:
+                    print(f"[{row_num}/{len(df)}] SKIP — missing: {missing}")
+                    results.append({"row": row_num, "status": "skip", "error": f"missing {missing}"})
                     completed_count += 1
-                    if progress_callback:
-                        await progress_callback(completed_count, total)
-                    return res
-                except Exception as e:
-                    completed_count += 1
-                    if progress_callback:
-                        await progress_callback(completed_count, total)
-                    return {"row": row_num, "status": "error", "error": str(e)}
+                    if progress_callback: await progress_callback(completed_count, len(df))
+                    queue.task_done()
+                    continue
+                
+                print(f"[{row_num}/{len(df)}] Tab {worker_id} processing: shdon={row.get('shdon')}")
+                
+                success = False
+                last_error = ""
+                for attempt in range(1, MAX_CAPTCHA_RETRIES + 1):
+                    try:
+                        if not page.url.startswith("http"):
+                            await page.goto(LOOKUP_URL, timeout=30000)
+                        
+                        await _fill_form_async(page, row, auto_solve, captcha_fn=captcha_fn)
+                        
+                        kh_val = "".join(c for c in str(row.get("khhdon","")) if c.isalnum())
+                        sh_val = "".join(c for c in str(row.get("shdon","")) if c.isalnum())
+                        out = OUTPUT_DIR / f"Row{row_num:04d}_{kh_val}_{sh_val}.png"
+                        
+                        await page.screenshot(path=str(out), full_page=True)
+                        results.append({"row": row_num, "status": "ok", "file": str(out)})
+                        success = True
+                        break
+                    except Exception as exc:
+                        last_error = str(exc)
+                        if "network" in last_error.lower() or "timeout" in last_error.lower():
+                            await asyncio.sleep(1)
+                            try: await page.goto(LOOKUP_URL, timeout=30000)
+                            except: pass
+                        else:
+                            await asyncio.sleep(0.5)
 
-        tasks = []
-        for idx, row_series in df.iterrows():
-            row = row_series.to_dict()
-            row_num = idx + 1
+                if not success:
+                    results.append({"row": row_num, "status": "error", "error": last_error})
+                
+                completed_count += 1
+                if progress_callback: await progress_callback(completed_count, len(df))
+                queue.task_done()
+            await context.close()
 
-            required = {k: str(row.get(k, "")).strip()
-                        for k in ("nbmst", "khhdon", "shdon", "tgtttbso")}
-            missing = [k for k, v in required.items() if not v or v == "nan"]
-            if missing:
-                print(f"[{row_num}/{len(df)}] SKIP — missing: {missing}")
-                results.append({"row": row_num, "status": "skip",
-                                 "error": f"missing {missing}"})
-                continue
-
-            tasks.append(_worker(row, row_num, len(df)))
-
-        results.extend(await asyncio.gather(*tasks))
-
+        worker_tasks = [asyncio.create_task(persistent_worker(i)) for i in range(MAX_CONCURRENT)]
+        await asyncio.gather(*worker_tasks)
         await browser.close()
 
     results.sort(key=lambda r: r["row"])
