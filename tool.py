@@ -620,8 +620,8 @@ async def process_rows_async(
     df = df.dropna(how="all").reset_index(drop=True)
     print(f"Found {len(df)} row(s). Columns: {list(df.columns)}")
 
-    MAX_CONCURRENT = 10
-    print(f"Processing {len(df)} row(s) with {MAX_CONCURRENT} 'Turbo' persistent tabs\n")
+    MAX_CONCURRENT = 15
+    print(f"Processing {len(df)} row(s) with {MAX_CONCURRENT} 'Extreme Turbo' tabs\n")
     
     start_time = time.time()
     results: list[dict] = []
@@ -636,7 +636,7 @@ async def process_rows_async(
         
         async def persistent_worker(worker_id):
             nonlocal completed_count
-            await asyncio.sleep(worker_id * 0.05) # Even faster stagger
+            await asyncio.sleep(worker_id * 0.2) # Balanced stagger to avoid network burst
             
             context = await browser.new_context(viewport={"width": 1400, "height": 1200}, ignore_https_errors=True)
             page = await context.new_page()
@@ -644,9 +644,12 @@ async def process_rows_async(
             # TURBO TECHNIQUE 1: Aggressive Blocking (Block fonts, media and non-essential scripts)
             async def block_assets(route):
                 url = route.request.url.lower()
+                # Block almost everything except logo, captcha and essential scripts
                 if route.request.resource_type in ["font", "media"]:
                     await route.abort()
-                elif any(p in url for p in ["google", "map", "analytics", "g2", "collect", "telemetry"]):
+                elif route.request.resource_type == "image" and "logo" not in url and "captcha" not in url:
+                    await route.abort()
+                elif any(p in url for p in ["google", "map", "analytics", "g2", "collect", "telemetry", "facebook"]):
                     await route.abort()
                 else:
                     await route.continue_()
@@ -730,7 +733,8 @@ async def process_rows_async(
                         }""")
                         
                         # Turbo Photo: JPEG is faster to encode than PNG
-                        await page.screenshot(path=str(out), type="jpeg", quality=80)
+                        # Hyper-fast JPEG encoding
+                        await page.screenshot(path=str(out), type="jpeg", quality=50)
                         results.append({"row": row_num, "status": "ok", "file": str(out)})
                         success = True
                         break
