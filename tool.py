@@ -466,7 +466,7 @@ async def _fill_form_async(page, row: dict, auto_solve: bool, captcha_fn=None) -
         await captcha_img.wait_for(state="visible", timeout=10000)
         # Force refresh to get a crisp new captcha
         await captcha_img.click()
-        await asyncio.sleep(0.7)
+        await asyncio.sleep(0.4) # Tightened from 0.7s
     except Exception:
         pass
 
@@ -504,9 +504,11 @@ async def _fill_form_async(page, row: dict, auto_solve: bool, captcha_fn=None) -
     await captcha_inp.fill(captcha_answer) # Immediate fill (Turbo mode)
     # No more await captcha_inp.type(captcha_answer, delay=30)
 
-    await page.locator(
-        'button[type="submit"]:has-text("Tìm kiếm"), button:has-text("Tìm kiếm")'
-    ).first.click()
+    # Direct Submit via script (Faster than simulated click)
+    try:
+        await page.evaluate("document.querySelector('button[type=\"submit\"]').click()")
+    except:
+        await page.locator('button[type="submit"]:has-text("Tìm kiếm")').first.click()
     
     # DO NOT wait for networkidle (it hangs for 30s). Wait for any loading spinners to vanish.
     await asyncio.sleep(1)
@@ -623,9 +625,12 @@ async def process_rows_async(
             context = await browser.new_context(viewport={"width": 1400, "height": 900}, ignore_https_errors=True)
             page = await context.new_page()
 
-            # TURBO TECHNIQUE 1: Block only the HEAVIEST unnecessary resources
+            # TURBO TECHNIQUE 1: Aggressive Blocking (Block fonts, media and non-essential scripts)
             async def block_assets(route):
+                url = route.request.url.lower()
                 if route.request.resource_type in ["font", "media"]:
+                    await route.abort()
+                elif "google" in url or "map" in url or "analytics" in url:
                     await route.abort()
                 else:
                     await route.continue_()
@@ -680,9 +685,10 @@ async def process_rows_async(
                         
                         kh_val = "".join(c for c in str(row.get("khhdon","")) if c.isalnum())
                         sh_val = "".join(c for c in str(row.get("shdon","")) if c.isalnum())
-                        out = OUTPUT_DIR / f"Row{row_num:04d}_{kh_val}_{sh_val}.png"
+                        out = OUTPUT_DIR / f"Row{row_num:04d}_{kh_val}_{sh_val}.jpg"
                         
-                        await page.screenshot(path=str(out), full_page=False)
+                        # Turbo Photo: JPEG is faster to encode than PNG
+                        await page.screenshot(path=str(out), type="jpeg", quality=80)
                         results.append({"row": row_num, "status": "ok", "file": str(out)})
                         success = True
                         break
