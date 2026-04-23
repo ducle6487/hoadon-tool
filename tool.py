@@ -537,11 +537,6 @@ async def _process_row_async(
         except Exception as exc:
             last_error = str(exc)
             print(f"  [Row {row_num}] [ERROR] {last_error}")
-            try:
-                err_out = OUTPUT_DIR / f"Row{row_num:04d}_ERROR.png"
-                await page.screenshot(path=str(err_out), full_page=True)
-            except Exception:
-                pass
         finally:
             await page.close()
 
