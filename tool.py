@@ -520,7 +520,7 @@ async def _process_row_async(
 
     for attempt in range(1, MAX_CAPTCHA_RETRIES + 1):
         if attempt > 1:
-            backoff = 1.0 + random.random() * 2
+            backoff = 3.0 + random.random() * 5
             print(f"  [Row {row_num}] Retrying ({attempt}/{MAX_CAPTCHA_RETRIES}) after {backoff:.1f}s…")
             await asyncio.sleep(backoff)
             
@@ -541,9 +541,9 @@ async def _process_row_async(
         except Exception as exc:
             last_error = str(exc)
             print(f"  [Row {row_num}] [ERROR] {last_error}")
-            # Network Error from server — pause before retry
+            # Network Error from server — wait long before retry to clear IP block
             if "network" in last_error.lower() or "timeout" in last_error.lower():
-                await asyncio.sleep(2 + random.random() * 2)
+                await asyncio.sleep(5 + random.random() * 5)
         finally:
             await page.close()
 
@@ -565,7 +565,7 @@ async def process_rows_async(
     df = df.dropna(how="all").reset_index(drop=True)
     print(f"Found {len(df)} row(s). Columns: {list(df.columns)}")
 
-    MAX_CONCURRENT = 10
+    MAX_CONCURRENT = 5
     print(f"Processing {len(df)} row(s) with {MAX_CONCURRENT} parallel tabs\n")
     
     start_time = time.time()
