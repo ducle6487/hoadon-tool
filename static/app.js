@@ -67,10 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateProgress(current, total) {
         rowFinished = current;
-        if (total === 0) {
-            etaValue.textContent = "Đang tính...";
-            return;
-        }
+        if (total === 0) return;
         
         const percent = Math.min(Math.round((current / total) * 100), 100);
         
@@ -78,17 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
         progressPercent.textContent = `${percent}%`;
         progressFill.style.width = `${percent}%`;
 
-        // ETA logic: Now assuming 20 tabs for MAX SPEED
-        const remaining = total - current;
-        if (remaining > 0) {
-            const avgTimePerRow = 9; 
-            const totalSecondsRemaining = (remaining / 20) * avgTimePerRow;
-            
-            const m = Math.floor(totalSecondsRemaining / 60);
-            const s = Math.round(totalSecondsRemaining % 60);
-            etaValue.textContent = `${m}p ${s}s`;
-        } else {
-            etaValue.textContent = "Đã xong!";
+        if (current >= total && total > 0) {
             stopTimer();
         }
     }
