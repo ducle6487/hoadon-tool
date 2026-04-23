@@ -518,13 +518,28 @@ async def _process_row_async(
     """Process one row using the shared context (new tab per row)."""
     last_error = ""
 
+    USER_AGENTS = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0",
+        "Mozilla/5.0 (ApplePC; MacOs) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    ]
+
     for attempt in range(1, MAX_CAPTCHA_RETRIES + 1):
         if attempt > 1:
-            backoff = 3.0 + random.random() * 5
+            backoff = 2.0 + random.random() * 2
             print(f"  [Row {row_num}] Retrying ({attempt}/{MAX_CAPTCHA_RETRIES}) after {backoff:.1f}s…")
             await asyncio.sleep(backoff)
             
-        page = await context.new_page()
+        # Create a fresh isolated context with random identity for each attempt
+        ua = random.choice(USER_AGENTS)
+        page_context = await context.browser.new_context(
+            user_agent=ua,
+            viewport={"width": 1400 + random.randint(-100, 100), "height": 900},
+            ignore_https_errors=True
+        )
+        page = await page_context.new_page()
         try:
             await page.goto(LOOKUP_URL, wait_until="domcontentloaded", timeout=60000)
             await _fill_form_async(page, row, auto_solve, captcha_fn=captcha_fn)
@@ -534,18 +549,20 @@ async def _process_row_async(
             kh_val = "".join(c for c in kh_val if c.isalnum())
             sh_val = "".join(c for c in sh_val if c.isalnum())
             out = OUTPUT_DIR / f"Row{row_num:04d}_{kh_val}_{sh_val}.png"
-            await page.screenshot(path=str(out), full_page=True)
-            print(f"  [Row {row_num}] -> Screenshot: {out}")
+            
+            # Fast screenshot (not full page) to save time
+            await page.screenshot(path=str(out), full_page=False)
+            print(f"  [Row {row_num}] -> Screenshot OK")
             return {"row": row_num, "status": "ok", "file": str(out)}
 
         except Exception as exc:
             last_error = str(exc)
             print(f"  [Row {row_num}] [ERROR] {last_error}")
-            # Network Error from server — wait long before retry to clear IP block
             if "network" in last_error.lower() or "timeout" in last_error.lower():
-                await asyncio.sleep(5 + random.random() * 5)
+                await asyncio.sleep(2 + random.random() * 3)
         finally:
             await page.close()
+            await page_context.close()
 
     return {"row": row_num, "status": "error", "error": last_error}
 
@@ -565,8 +582,8 @@ async def process_rows_async(
     df = df.dropna(how="all").reset_index(drop=True)
     print(f"Found {len(df)} row(s). Columns: {list(df.columns)}")
 
-    MAX_CONCURRENT = 5
-    print(f"Processing {len(df)} row(s) with {MAX_CONCURRENT} parallel tabs\n")
+    MAX_CONCURRENT = 12
+    print(f"Processing {len(df)} row(s) with {MAX_CONCURRENT} parallel tabs (TURBO MODE)\n")
     
     start_time = time.time()
     results: list[dict] = []
@@ -610,7 +627,7 @@ async def process_rows_async(
                                  "error": f"missing {missing}"})
                 continue
 
-            tasks.append(_worker(row, row_num, len(df), stagger=len(tasks) * 0.5))
+            tasks.append(_worker(row, row_num, len(df), stagger=len(tasks) * 0.25))
 
         results.extend(await asyncio.gather(*tasks))
 
