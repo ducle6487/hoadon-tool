@@ -7,8 +7,12 @@ echo        KHOI DONG SERVER HOA DON...
 echo ==============================================================
 
 echo He thong dang duoc khoi chay ngam, vui long DOI KHONG DONG CUA SO NAY.
-echo An phuong thuc chay:
-echo python -m uvicorn app:app --port 8000
+echo.
+echo ==========================================================
+echo ✅ KHOI DONG THANH CONG!
+echo 🌐 TRUY CAP VAO TRINH DUYET BANG DUONG LINK DUOI DAY:
+echo 👉 http://localhost:8000
+echo ==========================================================
 echo.
 
 start http://localhost:8000
