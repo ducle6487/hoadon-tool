@@ -646,7 +646,7 @@ async def process_rows_async(
                 url = route.request.url.lower()
                 if route.request.resource_type in ["font", "media"]:
                     await route.abort()
-                elif "google" in url or "map" in url or "analytics" in url:
+                elif any(p in url for p in ["google", "map", "analytics", "g2", "collect", "telemetry"]):
                     await route.abort()
                 else:
                     await route.continue_()
