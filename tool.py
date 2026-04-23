@@ -650,12 +650,20 @@ async def process_rows_async(
                         transition: none !important;
                         animation: none !important;
                     }
-                    /* Tàng hình Popups & Notifications */
-                    .ant-notification, .ant-modal, .ant-message, .ant-modal-mask {
+                    /* Tàng hình triệt để Popups, Modals, Overlays & Tin tức */
+                    .ant-notification, .ant-modal, .ant-message, .ant-modal-mask, 
+                    .ant-modal-root, .ant-modal-wrap, .ant-modal-container,
+                    [class*="modal"], [id*="modal"], [class*="popup"], [id*="popup"],
+                    .ant-drawer, .ant-popover, .ant-tooltip {
                         display: none !important;
                         visibility: hidden !important;
                         opacity: 0 !important;
                         pointer-events: none !important;
+                        z-index: -1000 !important;
+                    }
+                    /* Đảm bảo nền không bị mờ tối */
+                    body {
+                        overflow: auto !important;
                     }
                 `;
                 document.head.appendChild(style);
