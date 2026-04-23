@@ -501,8 +501,8 @@ async def _fill_form_async(page, row: dict, auto_solve: bool, captcha_fn=None) -
     
     await captcha_inp.click(timeout=3000)
     await asyncio.sleep(0.1)
-    await captcha_inp.fill("") # Clear first
-    await captcha_inp.type(captcha_answer, delay=30)
+    await captcha_inp.fill(captcha_answer) # Immediate fill (Turbo mode)
+    # No more await captcha_inp.type(captcha_answer, delay=30)
 
     await page.locator(
         'button[type="submit"]:has-text("Tìm kiếm"), button:has-text("Tìm kiếm")'
@@ -602,8 +602,8 @@ async def process_rows_async(
     df = df.dropna(how="all").reset_index(drop=True)
     print(f"Found {len(df)} row(s). Columns: {list(df.columns)}")
 
-    MAX_CONCURRENT = 30
-    print(f"Processing {len(df)} row(s) with {MAX_CONCURRENT} persistent tabs (EXTREME SPEED Mode)\n")
+    MAX_CONCURRENT = 10
+    print(f"Processing {len(df)} row(s) with {MAX_CONCURRENT} 'Turbo' persistent tabs\n")
     
     start_time = time.time()
     results: list[dict] = []
@@ -618,11 +618,33 @@ async def process_rows_async(
         
         async def persistent_worker(worker_id):
             nonlocal completed_count
-            # Staggered startup to avoid CPU/Network spikes
-            await asyncio.sleep(worker_id * 0.1)
+            await asyncio.sleep(worker_id * 0.05) # Even faster stagger
             
             context = await browser.new_context(viewport={"width": 1400, "height": 900}, ignore_https_errors=True)
             page = await context.new_page()
+
+            # TURBO TECHNIQUE 1: Block heavy/unnecessary resources
+            async def block_assets(route):
+                if route.request.resource_type in ["font", "media"]:
+                    await route.abort()
+                elif route.request.resource_type == "image" and "captcha" not in route.request.url.lower():
+                    # Block images except captcha to save bandwidth
+                    await route.abort()
+                else:
+                    await route.continue_()
+            await page.route("**/*", block_assets)
+
+            # TURBO TECHNIQUE 2: Disable CSS animations & transitions
+            await page.add_init_script("""
+                const style = document.createElement('style');
+                style.innerHTML = `
+                    *, *::before, *::after {
+                        transition: none !important;
+                        animation: none !important;
+                    }
+                `;
+                document.head.appendChild(style);
+            """)
             # Initial load
             try: await page.goto(LOOKUP_URL, wait_until="domcontentloaded", timeout=60000)
             except: pass
