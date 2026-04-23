@@ -9,8 +9,23 @@ echo ==============================================================
 echo.
 
 echo [1/3] Kiem tra va cai dat Python tu dong...
+
+SET "PYTHON_CMD=python"
 python --version >nul 2>&1
 IF %ERRORLEVEL% EQU 0 GOTO PYTHON_EXISTS
+
+IF EXIST "%LocalAppData%\Programs\Python\Python311\python.exe" (
+    SET "PYTHON_CMD=%LocalAppData%\Programs\Python\Python311\python.exe"
+    GOTO PYTHON_EXISTS
+)
+IF EXIST "%LocalAppData%\Programs\Python\Python312\python.exe" (
+    SET "PYTHON_CMD=%LocalAppData%\Programs\Python\Python312\python.exe"
+    GOTO PYTHON_EXISTS
+)
+IF EXIST "%LocalAppData%\Programs\Python\Python310\python.exe" (
+    SET "PYTHON_CMD=%LocalAppData%\Programs\Python\Python310\python.exe"
+    GOTO PYTHON_EXISTS
+)
 
 echo May tinh chua co Python. Dang tu dong bat dau qua trinh tai xuong...
 echo Xin vui long khong tat cua so nay, he thong dang lam viec het suc minh!
@@ -24,15 +39,9 @@ echo Dang hoan tat cai dat thong minh (Giau kin, tu dong 100%%)...
 start /wait "" "%~dp0python_installer.exe" /quiet InstallAllUsers=0 PrependPath=1 Include_test=0
 del "%~dp0python_installer.exe"
 
-    echo.
-    echo ====================================================================
-    echo [QUAN TRONG] CAI DAT PYTHON BUOC 1 DA THANH CONG!
-    echo De he thong nhan dien Python moi, ban BAT BUOC PHAI:
-    echo 1. TAT cua so nay bang cach bam dau cheo (X) tren cung.
-    echo 2. Nhan dup chuot de MO LAI file 'install_windows.bat' nay lan nua.
-    echo ====================================================================
-    pause
-    exit /b
+SET "PYTHON_CMD=%LocalAppData%\Programs\Python\Python311\python.exe"
+echo Cai dat Python hoan tat thanh cong!
+GOTO INSTALL_DEPS
 
 :DOWNLOAD_FAILED
 echo.
@@ -50,13 +59,13 @@ echo.
 echo ----------------------------------------------------
 echo [2/3] Dang cai dat cac thu vien loi...
 echo ----------------------------------------------------
-pip install -r requirements.txt
+"%PYTHON_CMD%" -m pip install -r requirements.txt
 
 echo.
 echo ----------------------------------------------------
 echo [3/3] Dang tai trinh duyet gia lap Playwright...
 echo ----------------------------------------------------
-playwright install chromium
+"%PYTHON_CMD%" -m playwright install chromium
 
 echo.
 echo ==============================================================

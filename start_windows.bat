@@ -16,7 +16,16 @@ echo 👉 http://localhost:8000
 echo ==========================================================
 echo.
 
+SET "PYTHON_CMD=python"
+IF EXIST "%LocalAppData%\Programs\Python\Python311\python.exe" (
+    SET "PYTHON_CMD=%LocalAppData%\Programs\Python\Python311\python.exe"
+) ELSE IF EXIST "%LocalAppData%\Programs\Python\Python312\python.exe" (
+    SET "PYTHON_CMD=%LocalAppData%\Programs\Python\Python312\python.exe"
+) ELSE IF EXIST "%LocalAppData%\Programs\Python\Python310\python.exe" (
+    SET "PYTHON_CMD=%LocalAppData%\Programs\Python\Python310\python.exe"
+)
+
 start http://localhost:8000
-python -m uvicorn app:app --port 8000
+"%PYTHON_CMD%" -m uvicorn app:app --port 8000
 
 pause
