@@ -71,26 +71,21 @@ async def run_tool(
             _original_print(*args, **kwargs)
         builtins.print = _ws_print
 
+        print(">> Đang chuẩn bị môi trường xử lý song song...")
+        print(">> Đang khởi chạy trình duyệt lõi (Chromium)...")
+
         try:
             async def auto_captcha_fn(page, auto_solve):
-                """Always auto-solve CAPTCHA using Claude or ddddocr."""
-                img = page.locator(
-                    "img[src*='captcha'], img[src*='Captcha'], "
-                    ".ant-form-item:has-text('Mã captcha') img, "
-                    "img[alt*='captcha']"
-                ).first
-                try:
-                    img_bytes = await img.screenshot()
-                except Exception:
-                    img_bytes = None
+                img = page.locator("img[src*='captcha'], img[src*='Captcha'], .ant-form-item:has-text('Mã captcha') img, img[alt*='captcha']").first
+                try: img_bytes = await img.screenshot()
+                except: img_bytes = None
 
                 if img_bytes:
-                    print("    [CAPTCHA] Auto-solving (ddddocr)…")
+                    print("    [CAPTCHA] Giải mã tự động...")
                     ocr = _get_ocr()
                     ans = ocr.classification(img_bytes)
-                    print(f"    [CAPTCHA] Answer: '{ans}'")
+                    print(f"    [CAPTCHA] Kết quả: '{ans}'")
                     return ans
-
                 return ""
 
             async def progress_cb(current, total):
@@ -103,6 +98,7 @@ async def run_tool(
             )
             await log_queue.put({"type": "done", "file": res})
         except Exception as e:
+            print(f">> LỖI HỆ THỐNG: {str(e)}")
             await log_queue.put({"type": "error", "msg": str(e)})
         finally:
             builtins.print = _original_print
