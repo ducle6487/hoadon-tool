@@ -513,19 +513,29 @@ async def _fill_form_async(page, row: dict, auto_solve: bool, captcha_fn=None) -
     # DO NOT wait for networkidle (it hangs for 30s). Wait for any loading spinners to vanish.
     await asyncio.sleep(0.5)
     
-    # Check for Server 500 error notifications (Ant Design toast)
+    # Check for Server 500 error notifications (More robust detection)
     try:
-        error_toast = page.locator(".ant-notification-notice-message, .ant-message-error").first
-        if await error_toast.is_visible(timeout=500):
+        # Check multiple selectors and wait a bit longer for the toast to appear
+        error_toast = page.locator(".ant-notification-notice-message, .ant-message-error, .ant-notification-notice-description").first
+        if await error_toast.is_visible(timeout=1000):
             err_text = await error_toast.inner_text()
-            if "500" in err_text or "failed" in err_text.lower():
-                print(f"    [WARNING] Server Thuế báo lỗi 500. Đang tải lại trang...")
-                await page.goto(LOOKUP_URL, timeout=30000)
-                raise ValueError("Server Thuế lỗi (500). Đang thử lại...")
+            err_lower = err_text.lower()
+            if "500" in err_lower or "failed" in err_lower or "lỗi" in err_lower or "không thể" in err_lower:
+                print(f"    [WARNING] Phát hiện lỗi Server (500/Failed). Đang xử lý phục hồi...")
+                # Try soft reset first, if fail then hard reload
+                try:
+                    await page.evaluate("const res = document.querySelector('.ant-table-wrapper'); if(res) res.style.display='none';")
+                    reset_btn = page.locator("button:has-text('Làm mới')").first
+                    await reset_btn.click(timeout=2000)
+                except:
+                    await page.goto(LOOKUP_URL, timeout=30000)
+                raise ValueError(f"Server Thuế lỗi: {err_text.strip()}. Đang thử lại...")
+    except ValueError:
+        raise
     except:
         pass
     
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(0.3)
 
     # Check for CAPTCHA error popups and Network Error toast
     err_text = page.locator('.ant-message-notice-content, .ant-modal-confirm-content, .ant-notification-notice-content, .ant-alert-error')
