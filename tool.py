@@ -628,7 +628,7 @@ async def process_rows_async(
             nonlocal completed_count
             await asyncio.sleep(worker_id * 0.05) # Even faster stagger
             
-            context = await browser.new_context(viewport={"width": 1100, "height": 700}, ignore_https_errors=True)
+            context = await browser.new_context(viewport={"width": 1400, "height": 1200}, ignore_https_errors=True)
             page = await context.new_page()
 
             # TURBO TECHNIQUE 1: Aggressive Blocking (Block fonts, media and non-essential scripts)
@@ -642,7 +642,7 @@ async def process_rows_async(
                     await route.continue_()
             await page.route("**/*", block_assets)
 
-            # TURBO TECHNIQUE 2: Disable CSS animations & Hide Popups/Toasts (Clean screenshots)
+            # TURBO TECHNIQUE 2: Disable CSS animations & Hide ONLY News Modals (Keep Error Toasts)
             await page.add_init_script("""
                 const style = document.createElement('style');
                 style.innerHTML = `
@@ -650,11 +650,9 @@ async def process_rows_async(
                         transition: none !important;
                         animation: none !important;
                     }
-                    /* Tàng hình triệt để Popups, Modals, Overlays & Tin tức */
-                    .ant-notification, .ant-modal, .ant-message, .ant-modal-mask, 
-                    .ant-modal-root, .ant-modal-wrap, .ant-modal-container,
-                    [class*="modal"], [id*="modal"], [class*="popup"], [id*="popup"],
-                    .ant-drawer, .ant-popover, .ant-tooltip {
+                    /* Tàng hình Modals & News (nhưng giữ lại Thông báo lỗi/trạng thái) */
+                    .ant-modal, .ant-modal-mask, .ant-modal-root, .ant-modal-wrap, 
+                    .ant-modal-container, [class*="modal"], [id*="modal"] {
                         display: none !important;
                         visibility: hidden !important;
                         opacity: 0 !important;
@@ -708,15 +706,14 @@ async def process_rows_async(
                         sh_val = "".join(c for c in str(row.get("shdon","")) if c.isalnum())
                         out = OUTPUT_DIR / f"Row{row_num:04d}_{kh_val}_{sh_val}.jpg"
                         
-                        # LAST-SECOND CLEANUP: Force remove any overlays right before screenshot
+                        # LAST-SECOND CLEANUP: Force remove ONLY news modals (KEEP notifications)
                         await page.evaluate("""() => {
-                            const selectors = [
-                                '.ant-notification', '.ant-modal', '.ant-message', '.ant-modal-mask', 
-                                '.ant-modal-root', '.ant-modal-wrap', '.ant-modal-container',
-                                '[class*="modal"]', '[id*="modal"]', '[class*="popup"]', '[id*="popup"]',
-                                '.ant-drawer', '.ant-popover', '.ant-tooltip', 'mask', '.overlay'
+                            const newsModals = [
+                                '.ant-modal', '.ant-modal-mask', '.ant-modal-root', 
+                                '.ant-modal-wrap', '.ant-modal-container',
+                                '[class*="modal"]', '[id*="modal"]'
                             ];
-                            selectors.forEach(s => {
+                            newsModals.forEach(s => {
                                 document.querySelectorAll(s).forEach(el => el.remove());
                             });
                             document.body.style.overflow = 'auto';
