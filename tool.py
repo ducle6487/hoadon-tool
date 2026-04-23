@@ -520,7 +520,7 @@ async def _process_row_async(
 
     for attempt in range(1, MAX_CAPTCHA_RETRIES + 1):
         if attempt > 1:
-            backoff = 2.0 * attempt + random.random() * 2
+            backoff = 0.5 + random.random()
             print(f"  [Row {row_num}] Retrying ({attempt}/{MAX_CAPTCHA_RETRIES}) after {backoff:.1f}s…")
             await asyncio.sleep(backoff)
             
@@ -541,9 +541,9 @@ async def _process_row_async(
         except Exception as exc:
             last_error = str(exc)
             print(f"  [Row {row_num}] [ERROR] {last_error}")
-            # Network Error from server — wait longer before retry
+            # Network Error from server — brief pause before retry
             if "network" in last_error.lower() or "timeout" in last_error.lower():
-                await asyncio.sleep(3 + random.random() * 3)
+                await asyncio.sleep(1 + random.random())
         finally:
             await page.close()
 
