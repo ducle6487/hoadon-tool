@@ -464,13 +464,30 @@ async def _fill_form_async(page, row: dict, auto_solve: bool, captcha_fn=None) -
     ).first
     try:
         await captcha_img.wait_for(state="visible", timeout=10000)
+        # Force refresh to get a crisp new captcha
+        await captcha_img.click()
+        await asyncio.sleep(0.7)
     except Exception:
         pass
 
-    if captcha_fn:
-        captcha_answer = await captcha_fn(page, auto_solve)
-    else:
-        captcha_answer = get_captcha_answer(page, auto_solve)
+    captcha_answer = ""
+    # Try up to 2 mini-attempts within the same page to get a valid 6-char answer
+    for img_attempt in range(2):
+        if captcha_fn:
+            captcha_answer = await captcha_fn(page, auto_solve)
+        else:
+            captcha_answer = get_captcha_answer(page, auto_solve)
+        
+        # Tax portal captchas are always 6 chars
+        if captcha_answer and len(captcha_answer) == 6:
+            break
+        
+        # If still not 6 chars, click to refresh image and loop
+        try:
+            await captcha_img.click()
+            await asyncio.sleep(0.6)
+        except:
+            break
 
     if not captcha_answer:
         raise ValueError("Không thể lấy được mã Captcha. Đang thử lại...")
