@@ -629,7 +629,9 @@ async def process_rows_async(
                                  "error": f"missing {missing}"})
                 continue
 
-            tasks.append(_worker(row, row_num, len(df), stagger=len(tasks) * 0.25))
+            # Only stagger the first MAX_CONCURRENT tasks to avoid CPU spike at start
+            stagger = (len(tasks) * 0.3) if len(tasks) < MAX_CONCURRENT else 0
+            tasks.append(_worker(row, row_num, len(df), stagger=stagger))
 
         results.extend(await asyncio.gather(*tasks))
 
