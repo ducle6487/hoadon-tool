@@ -558,9 +558,11 @@ async def process_rows_async(
     df = df.dropna(how="all").reset_index(drop=True)
     print(f"Found {len(df)} row(s). Columns: {list(df.columns)}")
 
-    print(f"Processing {len(df)} row(s) sequentially\n")
+    MAX_CONCURRENT = 5
+    print(f"Processing {len(df)} row(s) with {MAX_CONCURRENT} parallel tabs\n")
 
     results: list[dict] = []
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT)
 
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(
@@ -572,6 +574,20 @@ async def process_rows_async(
             ignore_https_errors=True,
         )
 
+        async def _worker(row: dict, row_num: int, total: int) -> dict:
+            async with semaphore:
+                print(
+                    f"[{row_num}/{total}] Processing: nbmst={row.get('nbmst')}  "
+                    f"khhdon={row.get('khhdon')}  shdon={row.get('shdon')}"
+                )
+                try:
+                    return await _process_row_async(
+                        context, row, row_num, total, auto_solve, captcha_fn,
+                    )
+                except Exception as e:
+                    return {"row": row_num, "status": "error", "error": str(e)}
+
+        tasks = []
         for idx, row_series in df.iterrows():
             row = row_series.to_dict()
             row_num = idx + 1
@@ -585,18 +601,9 @@ async def process_rows_async(
                                  "error": f"missing {missing}"})
                 continue
 
-            print(
-                f"[{row_num}/{len(df)}] Processing: nbmst={row.get('nbmst')}  "
-                f"khhdon={row.get('khhdon')}  shdon={row.get('shdon')}"
-            )
-            
-            try:
-                res = await _process_row_async(
-                    context, row, row_num, len(df), auto_solve, captcha_fn,
-                )
-                results.append(res)
-            except Exception as e:
-                results.append({"row": row_num, "status": "error", "error": str(e)})
+            tasks.append(_worker(row, row_num, len(df)))
+
+        results.extend(await asyncio.gather(*tasks))
 
         await browser.close()
 
