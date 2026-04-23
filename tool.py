@@ -520,7 +520,7 @@ async def _process_row_async(
 
     for attempt in range(1, MAX_CAPTCHA_RETRIES + 1):
         if attempt > 1:
-            backoff = 0.5 + random.random()
+            backoff = 1.0 + random.random() * 2
             print(f"  [Row {row_num}] Retrying ({attempt}/{MAX_CAPTCHA_RETRIES}) after {backoff:.1f}s…")
             await asyncio.sleep(backoff)
             
@@ -541,9 +541,9 @@ async def _process_row_async(
         except Exception as exc:
             last_error = str(exc)
             print(f"  [Row {row_num}] [ERROR] {last_error}")
-            # Network Error from server — brief pause before retry
+            # Network Error from server — pause before retry
             if "network" in last_error.lower() or "timeout" in last_error.lower():
-                await asyncio.sleep(1 + random.random())
+                await asyncio.sleep(2 + random.random() * 2)
         finally:
             await page.close()
 
@@ -565,7 +565,7 @@ async def process_rows_async(
     df = df.dropna(how="all").reset_index(drop=True)
     print(f"Found {len(df)} row(s). Columns: {list(df.columns)}")
 
-    MAX_CONCURRENT = 10
+    MAX_CONCURRENT = 7
     print(f"Processing {len(df)} row(s) with {MAX_CONCURRENT} parallel tabs\n")
 
     results: list[dict] = []
