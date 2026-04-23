@@ -708,6 +708,20 @@ async def process_rows_async(
                         sh_val = "".join(c for c in str(row.get("shdon","")) if c.isalnum())
                         out = OUTPUT_DIR / f"Row{row_num:04d}_{kh_val}_{sh_val}.jpg"
                         
+                        # LAST-SECOND CLEANUP: Force remove any overlays right before screenshot
+                        await page.evaluate("""() => {
+                            const selectors = [
+                                '.ant-notification', '.ant-modal', '.ant-message', '.ant-modal-mask', 
+                                '.ant-modal-root', '.ant-modal-wrap', '.ant-modal-container',
+                                '[class*="modal"]', '[id*="modal"]', '[class*="popup"]', '[id*="popup"]',
+                                '.ant-drawer', '.ant-popover', '.ant-tooltip', 'mask', '.overlay'
+                            ];
+                            selectors.forEach(s => {
+                                document.querySelectorAll(s).forEach(el => el.remove());
+                            });
+                            document.body.style.overflow = 'auto';
+                        }""")
+                        
                         # Turbo Photo: JPEG is faster to encode than PNG
                         await page.screenshot(path=str(out), type="jpeg", quality=80)
                         results.append({"row": row_num, "status": "ok", "file": str(out)})
