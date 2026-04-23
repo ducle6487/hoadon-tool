@@ -78,11 +78,11 @@ document.addEventListener('DOMContentLoaded', () => {
         progressPercent.textContent = `${percent}%`;
         progressFill.style.width = `${percent}%`;
 
-        // ETA logic: Now assuming 10 tabs for HALF processing time
+        // ETA logic: Now assuming 20 tabs for MAX SPEED
         const remaining = total - current;
         if (remaining > 0) {
             const avgTimePerRow = 9; 
-            const totalSecondsRemaining = (remaining / 10) * avgTimePerRow;
+            const totalSecondsRemaining = (remaining / 20) * avgTimePerRow;
             
             const m = Math.floor(totalSecondsRemaining / 60);
             const s = Math.round(totalSecondsRemaining % 60);
