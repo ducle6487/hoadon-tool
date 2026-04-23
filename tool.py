@@ -618,6 +618,9 @@ async def process_rows_async(
         
         async def persistent_worker(worker_id):
             nonlocal completed_count
+            # Staggered startup to avoid CPU/Network spikes
+            await asyncio.sleep(worker_id * 0.2)
+            
             context = await browser.new_context(viewport={"width": 1400, "height": 900}, ignore_https_errors=True)
             page = await context.new_page()
             # Initial load
@@ -626,10 +629,13 @@ async def process_rows_async(
 
             while True:
                 try:
-                    # Get next task from queue
+                    # Get next task from queue safely
                     if queue.empty(): break
-                    row_num, row = await queue.get()
-                except: break
+                    row_num, row = queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+                except:
+                    break
 
                 # Validation
                 required = {k: str(row.get(k, "")).strip() for k in ("nbmst", "khhdon", "shdon", "tgtttbso")}
