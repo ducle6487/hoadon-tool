@@ -628,7 +628,7 @@ async def process_rows_async(
             nonlocal completed_count
             await asyncio.sleep(worker_id * 0.05) # Even faster stagger
             
-            context = await browser.new_context(viewport={"width": 1400, "height": 900}, ignore_https_errors=True)
+            context = await browser.new_context(viewport={"width": 1100, "height": 700}, ignore_https_errors=True)
             page = await context.new_page()
 
             # TURBO TECHNIQUE 1: Aggressive Blocking (Block fonts, media and non-essential scripts)
@@ -642,13 +642,20 @@ async def process_rows_async(
                     await route.continue_()
             await page.route("**/*", block_assets)
 
-            # TURBO TECHNIQUE 2: Disable CSS animations & transitions
+            # TURBO TECHNIQUE 2: Disable CSS animations & Hide Popups/Toasts (Clean screenshots)
             await page.add_init_script("""
                 const style = document.createElement('style');
                 style.innerHTML = `
                     *, *::before, *::after {
                         transition: none !important;
                         animation: none !important;
+                    }
+                    /* Tàng hình Popups & Notifications */
+                    .ant-notification, .ant-modal, .ant-message, .ant-modal-mask {
+                        display: none !important;
+                        visibility: hidden !important;
+                        opacity: 0 !important;
+                        pointer-events: none !important;
                     }
                 `;
                 document.head.appendChild(style);
