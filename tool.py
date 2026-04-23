@@ -602,7 +602,10 @@ async def process_rows_async(
             ignore_https_errors=True,
         )
 
+        completed_count = 0
+
         async def _worker(row: dict, row_num: int, total: int) -> dict:
+            nonlocal completed_count
             # Short jitter to spread initial load
             await asyncio.sleep(random.uniform(0.1, 1.5))
             async with semaphore:
@@ -616,12 +619,14 @@ async def process_rows_async(
                     res = await _process_row_async(
                         context, row, row_num, total, auto_solve, captcha_fn,
                     )
+                    completed_count += 1
                     if progress_callback:
-                        await progress_callback(row_num, total)
+                        await progress_callback(completed_count, total)
                     return res
                 except Exception as e:
+                    completed_count += 1
                     if progress_callback:
-                        await progress_callback(row_num, total)
+                        await progress_callback(completed_count, total)
                     return {"row": row_num, "status": "error", "error": str(e)}
 
         tasks = []
