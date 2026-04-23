@@ -511,12 +511,18 @@ async def _fill_form_async(page, row: dict, auto_solve: bool, captcha_fn=None) -
         await page.locator('button[type="submit"]:has-text("Tìm kiếm")').first.click()
     
     # DO NOT wait for networkidle (it hangs for 30s). Wait for any loading spinners to vanish.
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.5)
+    
+    # Check for Server 500 error notifications (Ant Design toast)
     try:
-        spinner = page.locator('.ant-spin-spinning').first
-        if await spinner.is_visible():
-            await spinner.wait_for(state="hidden", timeout=30000)
-    except Exception:
+        error_toast = page.locator(".ant-notification-notice-message, .ant-message-error").first
+        if await error_toast.is_visible(timeout=500):
+            err_text = await error_toast.inner_text()
+            if "500" in err_text or "failed" in err_text.lower():
+                print(f"    [WARNING] Server Thuế báo lỗi 500. Đang tải lại trang...")
+                await page.goto(LOOKUP_URL, timeout=30000)
+                raise ValueError("Server Thuế lỗi (500). Đang thử lại...")
+    except:
         pass
     
     await asyncio.sleep(0.5)
