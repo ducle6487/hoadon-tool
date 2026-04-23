@@ -41,7 +41,7 @@ from playwright.sync_api import sync_playwright, Page, Locator
 
 OUTPUT_DIR = Path("output")
 LOOKUP_URL = "https://hoadondientu.gdt.gov.vn/"
-MAX_CAPTCHA_RETRIES = 20
+MAX_CAPTCHA_RETRIES = 10
 
 # Thumbnail size embedded in the results Excel
 THUMB_W = 1920   # pixels wide
@@ -620,8 +620,8 @@ async def process_rows_async(
     df = df.dropna(how="all").reset_index(drop=True)
     print(f"Found {len(df)} row(s). Columns: {list(df.columns)}")
 
-    MAX_CONCURRENT = 15
-    print(f"Processing {len(df)} row(s) with {MAX_CONCURRENT} 'Extreme Turbo' tabs\n")
+    MAX_CONCURRENT = 10
+    print(f"Processing {len(df)} row(s) with {MAX_CONCURRENT} 'Balanced Turbo' tabs\n")
     
     start_time = time.time()
     results: list[dict] = []
@@ -636,7 +636,7 @@ async def process_rows_async(
         
         async def persistent_worker(worker_id):
             nonlocal completed_count
-            await asyncio.sleep(worker_id * 0.2) # Balanced stagger to avoid network burst
+            await asyncio.sleep(worker_id * 0.5) # Safer stagger to avoid rate limits
             
             context = await browser.new_context(viewport={"width": 1400, "height": 1200}, ignore_https_errors=True)
             page = await context.new_page()
