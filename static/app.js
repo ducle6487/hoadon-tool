@@ -55,18 +55,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateProgress(current, total) {
         rowFinished = current;
+        if (total === 0) {
+            etaValue.textContent = "Đang tính...";
+            return;
+        }
+        
         const percent = Math.min(Math.round((current / total) * 100), 100);
         
         progressLabel.textContent = `Đang xử lý: ${current}/${total} hóa đơn`;
         progressPercent.textContent = `${percent}%`;
         progressFill.style.width = `${percent}%`;
 
-        // ETA logic: Assuming 3 attempts total (1 load + 2 retries) per row if requested.
-        // Each attempt ~10s. For 8 concurrent tabs:
+        // ETA logic: Assuming 5 tabs
         const remaining = total - current;
         if (remaining > 0) {
-            // Updated calculation for 5 tabs (MAX_CONCURRENT=5)
-            const avgTimePerRow = 9; // ~9s avg to finish within 7m for 240 rows
+            const avgTimePerRow = 9; 
             const totalSecondsRemaining = (remaining / 5) * avgTimePerRow;
             
             const m = Math.floor(totalSecondsRemaining / 60);
