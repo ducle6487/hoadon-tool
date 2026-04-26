@@ -75,11 +75,43 @@ async def run_tool(file: UploadFile = File(...), headless: bool = Form(False)):
 
         try:
             async def auto_captcha_fn(page, auto_solve):
-                img = page.locator("img[src*='captcha'], img[src*='Captcha'], .ant-form-item:has-text('Mã captcha') img, img[alt*='captcha']").first
-                img_bytes = await img.screenshot()
+                img_loc = page.locator("img[src*='captcha'], img[src*='Captcha'], .ant-form-item:has-text('Mã captcha') img, img[alt*='captcha']").first
+                img_bytes = await img_loc.screenshot()
                 if img_bytes:
-                    await broadcast_log({"type": "log", "msg": "    [CAPTCHA] Giải mã tự động..."})
-                    ans = _get_ocr().classification(img_bytes)
+                    try:
+                        from PIL import Image, ImageEnhance, ImageFilter
+                        import io
+                        # Mở ảnh bằng PIL để xử lý
+                        pil_img = Image.open(io.BytesIO(img_bytes))
+                        
+                        # 1. Phóng to 2x (Resizing helps OCR)
+                        w, h = pil_img.size
+                        pil_img = pil_img.resize((w * 2, h * 2), Image.Resampling.LANCZOS)
+                        
+                        # 2. Chuyển sang Grayscale
+                        pil_img = pil_img.convert('L')
+                        
+                        # 3. Tăng độ tương phản (Contrast)
+                        enhancer = ImageEnhance.Contrast(pil_img)
+                        pil_img = enhancer.enhance(2.0)
+                        
+                        # 4. Làm sắc nét (Sharpen)
+                        pil_img = pil_img.filter(ImageFilter.SHARPEN)
+                        
+                        # Chuyển ngược lại bytes
+                        buf = io.BytesIO()
+                        pil_img.save(buf, format='PNG')
+                        processed_bytes = buf.getvalue()
+                        
+                        await broadcast_log({"type": "log", "msg": "    [CAPTCHA] Đã tăng chất lượng ảnh -> Đang giải mã..."})
+                        ans = _get_ocr().classification(processed_bytes)
+                    except Exception as e:
+                        print(f"Error enhancing image: {e}")
+                        # Fallback về ảnh gốc nếu xử lý lỗi
+                        ans = _get_ocr().classification(img_bytes)
+                    
+                    # Chuẩn hóa: xoá khoảng trắng, viết thường
+                    ans = "".join(ans.split()).lower()
                     await broadcast_log({"type": "log", "msg": f"    [CAPTCHA] Kết quả: '{ans}'"})
                     return ans
                 return ""
