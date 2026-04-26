@@ -22,6 +22,7 @@ active_websockets = set()
 is_processing = False
 current_task = None
 _ocr_instance = None
+captcha_cache = {} # MD5 Hash -> Answer string
 
 def _get_ocr():
     global _ocr_instance
@@ -103,8 +104,14 @@ async def run_tool(file: UploadFile = File(...), headless: bool = Form(False)):
                         pil_img.save(buf, format='PNG')
                         processed_bytes = buf.getvalue()
                         
-                        # ans = _get_ocr().classification(processed_bytes)
-                        ans = _get_ocr().classification(processed_bytes)
+                        import hashlib
+                        img_hash = hashlib.md5(processed_bytes).hexdigest()
+                        if img_hash in captcha_cache:
+                            ans = captcha_cache[img_hash]
+                            # await broadcast_log({"type": "log", "msg": f"    [CAPTCHA] Dùng kết quả từ bộ nhớ tạm: '{ans}'"})
+                        else:
+                            ans = _get_ocr().classification(processed_bytes)
+                            captcha_cache[img_hash] = ans
                     except Exception as e:
                         # Fallback về ảnh gốc nếu xử lý lỗi
                         ans = _get_ocr().classification(img_bytes)
