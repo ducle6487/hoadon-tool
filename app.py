@@ -103,16 +103,14 @@ async def run_tool(file: UploadFile = File(...), headless: bool = Form(False)):
                         pil_img.save(buf, format='PNG')
                         processed_bytes = buf.getvalue()
                         
-                        await broadcast_log({"type": "log", "msg": "    [CAPTCHA] Đã tăng chất lượng ảnh -> Đang giải mã..."})
+                        # ans = _get_ocr().classification(processed_bytes)
                         ans = _get_ocr().classification(processed_bytes)
                     except Exception as e:
-                        print(f"Error enhancing image: {e}")
                         # Fallback về ảnh gốc nếu xử lý lỗi
                         ans = _get_ocr().classification(img_bytes)
                     
                     # Chuẩn hóa: xoá khoảng trắng, viết thường
                     ans = "".join(ans.split()).lower()
-                    await broadcast_log({"type": "log", "msg": f"    [CAPTCHA] Kết quả: '{ans}'"})
                     return ans
                 return ""
 
