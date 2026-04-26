@@ -43,7 +43,7 @@ from playwright.sync_api import sync_playwright, Page, Locator
 
 OUTPUT_DIR = Path("output")
 LOOKUP_URL = "https://hoadondientu.gdt.gov.vn/"
-MAX_CAPTCHA_RETRIES = 10
+MAX_CAPTCHA_RETRIES = 15
 
 # Thumbnail size embedded in the results Excel
 THUMB_W = 1920   # pixels wide
@@ -622,8 +622,8 @@ async def process_rows_async(
     df = df.dropna(how="all").reset_index(drop=True)
     print(f"Found {len(df)} row(s). Columns: {list(df.columns)}")
 
-    MAX_CONCURRENT = 12
-    print(f"Processing {len(df)} row(s) with {MAX_CONCURRENT} 'Turbo' tabs\n")
+    MAX_CONCURRENT = 14
+    print(f"Processing {len(df)} row(s) with {MAX_CONCURRENT} 'Ultra-Stable-Turbo' tabs\n")
     
     start_time = time.time()
     results: list[dict] = []
@@ -638,7 +638,7 @@ async def process_rows_async(
         
         async def persistent_worker(worker_id):
             nonlocal completed_count
-            await asyncio.sleep(worker_id * 0.3) # Faster staggered launch
+            await asyncio.sleep(worker_id * 0.1) # Faster staggered launch for performance
             
             context = await browser.new_context(viewport={"width": 1400, "height": 1200}, ignore_https_errors=True)
             page = await context.new_page()
@@ -716,6 +716,11 @@ async def process_rows_async(
                             await page.goto(LOOKUP_URL, timeout=30000)
                         
                         await _fill_form_async(page, row, auto_solve, captcha_fn=captcha_fn)
+                        
+                        # ULTRA-STABLE DETECTION: 7 seconds is the sweet spot
+                        try:
+                            await page.locator(".ant-table-tbody, .ant-empty-description, .ant-notification-notice-error").first.wait_for(state="visible", timeout=7000)
+                        except: pass
                         
                         kh_val = "".join(c for c in str(row.get("khhdon","")) if c.isalnum())
                         sh_val = "".join(c for c in str(row.get("shdon","")) if c.isalnum())
