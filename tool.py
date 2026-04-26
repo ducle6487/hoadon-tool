@@ -784,9 +784,28 @@ async def process_rows_async(
         doc = Document()
         doc.add_heading('BÁO CÁO ẢNH HÓA ĐƠN TRA CỨU', 0)
         
+        # Add Summary Table first
+        doc.add_heading('DANH SÁCH TỔNG HỢP', level=1)
+        table = doc.add_table(rows=1, cols=3)
+        table.style = 'Table Grid'
+        hdr_cells = table.rows[0].cells
+        hdr_cells[0].text = 'STT'
+        hdr_cells[1].text = 'Trạng thái'
+        hdr_cells[2].text = 'Tên File / Ghi chú'
+        
+        for r in results:
+            row_cells = table.add_row().cells
+            row_cells[0].text = str(r["row"])
+            row_cells[1].text = r["status"].upper()
+            row_cells[2].text = Path(r.get("file", "")).name if r.get("file") else r.get("error", "")
+
+        doc.add_page_break()
+
+        # Detailed images
+        doc.add_heading('CHI TIẾT ẢNH CHỤP', level=1)
         for r in results:
             if r["status"] == "ok" and r.get("file") and os.path.exists(r["file"]):
-                doc.add_heading(f"Dòng {r['row']} - File: {Path(r['file']).name}", level=1)
+                doc.add_heading(f"Dòng {r['row']} - File: {Path(r['file']).name}", level=2)
                 doc.add_picture(r["file"], width=Inches(6.0))
                 doc.add_page_break()
         
