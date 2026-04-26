@@ -774,6 +774,29 @@ async def process_rows_async(
 
         worker_tasks = [asyncio.create_task(persistent_worker(i)) for i in range(MAX_CONCURRENT)]
         await asyncio.gather(*worker_tasks)
+
+        # RETRY PHASES: 5 more attempts for all error rows
+        for phase in range(1, 6):
+            failed_rows_info = [r for r in results if r["status"] == "error"]
+            if not failed_rows_info:
+                break
+            
+            print(f"\n[RETRY PHASE {phase}/5] Retrying {len(failed_rows_info)} failed rows...")
+            
+            # Clear old error results for these rows before retrying
+            failed_row_nums = {r["row"] for r in failed_rows_info}
+            results = [r for r in results if r["row"] not in failed_row_nums]
+            
+            # Re-build queue for failed rows
+            for r_info in failed_rows_info:
+                # Find original row data from df
+                original_row = df.iloc[r_info["row"] - 1].to_dict()
+                queue.put_nowait((r_info["row"], original_row))
+            
+            # Re-launch workers for this phase
+            worker_tasks = [asyncio.create_task(persistent_worker(i)) for i in range(MAX_CONCURRENT)]
+            await asyncio.gather(*worker_tasks)
+
         await browser.close()
 
     results.sort(key=lambda r: r["row"])
