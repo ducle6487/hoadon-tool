@@ -35,6 +35,8 @@ from openpyxl.drawing.image import Image as XLImage
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from PIL import Image as PILImage
+from docx import Document
+from docx.shared import Inches
 from playwright.sync_api import sync_playwright, Page, Locator
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -774,6 +776,24 @@ async def process_rows_async(
     import os
     summary_path = OUTPUT_DIR / "chitiét_xuly.xlsx"
     pd.DataFrame(results).to_excel(str(summary_path), index=False)
+
+    # NEW: Create Word Document with all screenshots
+    try:
+        from docx import Document
+        from docx.shared import Inches
+        doc = Document()
+        doc.add_heading('BÁO CÁO ẢNH HÓA ĐƠN TRA CỨU', 0)
+        
+        for r in results:
+            if r["status"] == "ok" and r.get("file") and os.path.exists(r["file"]):
+                doc.add_heading(f"Dòng {r['row']} - File: {Path(r['file']).name}", level=1)
+                doc.add_picture(r["file"], width=Inches(6.0))
+                doc.add_page_break()
+        
+        word_path = OUTPUT_DIR / "Bao_cao_anh_hoa_don.docx"
+        doc.save(str(word_path))
+    except Exception as e:
+        print(f"Lỗi khi tạo file Word: {e}")
     
     zip_path = str(Path("output_images").absolute())
     shutil.make_archive(zip_path, 'zip', str(OUTPUT_DIR))
