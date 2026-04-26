@@ -622,8 +622,8 @@ async def process_rows_async(
     df = df.dropna(how="all").reset_index(drop=True)
     print(f"Found {len(df)} row(s). Columns: {list(df.columns)}")
 
-    MAX_CONCURRENT = 14
-    print(f"Processing {len(df)} row(s) with {MAX_CONCURRENT} 'Ultra-Stable-Turbo' tabs\n")
+    MAX_CONCURRENT = 15
+    print(f"Processing {len(df)} row(s) with {MAX_CONCURRENT} 'Hybrid Turbo' tabs\n")
     
     start_time = time.time()
     results: list[dict] = []
@@ -712,8 +712,18 @@ async def process_rows_async(
                 last_error = ""
                 for attempt in range(1, MAX_CAPTCHA_RETRIES + 1):
                     try:
-                        if not page.url.startswith("http"):
-                            await page.goto(LOOKUP_URL, timeout=30000)
+                        # HYBRID RELOAD: Fast soft-reset by default, only goto if cold start or error
+                        if not page.url.startswith("http") or (attempt > 1 and "network" in last_error.lower()):
+                            try:
+                                await page.goto(LOOKUP_URL, wait_until="commit", timeout=20000)
+                            except:
+                                await page.goto(LOOKUP_URL, timeout=30000)
+                        else:
+                            # Standard fast reset
+                            try:
+                                await page.locator("button:has-text('Làm mới'), .ant-btn-background-ghost").first.click(timeout=2000)
+                                await asyncio.sleep(0.2)
+                            except: pass
                         
                         await _fill_form_async(page, row, auto_solve, captcha_fn=captcha_fn)
                         
