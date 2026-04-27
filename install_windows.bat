@@ -69,8 +69,9 @@ echo ----------------------------------------------------
 
 echo.
 echo ==============================================================
-echo  [HOAN TAT] Cai dat thanh cong cham diem 10!
-echo  Bay gio ban chi can nhap dup chuot vao file 'start_windows.bat' la xai thoi.
-echo  Ban co the TẮT cua so MAU DEN nay.
+echo  [HOAN TAT] Cai dat thanh cong ruc ro!
+echo  Tool da san sang o che do "Nitro Boost" (Sieu toc - 15 Tab).
+echo  Bay gio ban chi can nhap dup chuot vao file 'start_windows.bat' la xai.
+echo  Ban co the TAT cua so nay.
 echo ==============================================================
 pause

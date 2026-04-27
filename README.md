@@ -14,32 +14,26 @@ Phiên bản tối thượng được thiết kế để đạt tốc độ xử
   - Mỗi hóa đơn được trình bày chi tiết kèm ảnh chụp sắc nét ở các trang tiếp theo.
 - **🧹 Zero-Modal Cleanup**: Tự động dọn dẹp các thông báo tin tức, cửa sổ quảng cáo của trang Thuế để ảnh chụp luôn sạch sẽ, không bị che khuất.
 
-## 📦 Cài Đặt (Installation)
+## 📦 Cài Đặt "1-Click" (Easy Installation)
 
-Yêu cầu máy tính có cài đặt **Python 3.9+**.
+Công cụ đã được tối ưu để bạn có thể cài đặt và sử dụng mà không cần gõ lệnh:
 
-1. **Clone repository này về máy:**
-```bash
-git clone https://github.com/ducle6487/hoadon-tool.git
-cd hoadon-tool
-```
+### Đối với Windows (PC)
+1. Đúp chuột vào **`install_windows.bat`**: Hệ thống sẽ tự động cài đặt Python, thư viện và trình duyệt.
+2. Sau khi xong, đúp chuột vào **`start_windows.bat`** để bắt đầu sử dụng.
 
-2. **Cài đặt các thư viện lõi Python:**
-```bash
-python3 -m pip install -r requirements.txt
-python3 -m pip install python-docx
-```
+### Đối với macOS (Macbook)
+1. Đúp chuột vào **`start_tool.command`**: Hệ thống sẽ tự động kiểm tra thư viện và bật máy chủ tra cứu ngay lập tức.
+2. Khi không dùng nữa, đúp chuột vào **`stop_tool.command`** để dọn dẹp RAM.
 
-3. **Cài đặt hệ điều hành trình duyệt giả lập Playwright:**
-```bash
-playwright install chromium
-```
+---
 
-## 🎮 Hướng Dẫn Sử Dụng (Usage)
+## 🎮 Cách Sử Dụng (Usage)
 
-### Dành riêng cho người dùng MacOS (1-Click)
-- Chạy **`start_tool.command`**: Khởi động máy chủ giao diện web.
-- Chạy **`stop_tool.command`**: Tắt toàn bộ hệ thống và dọn dẹp RAM.
+1. Mở trình duyệt và truy cập: `http://localhost:8000`
+2. Kéo thả file Excel chứa danh sách hóa đơn.
+3. Bấm **START** và quan sát 15 Tab làm việc cùng lúc với tốc độ "Nitro".
+4. Tải về file ZIP kết quả bao gồm: **Excel (có ảnh)**, **Word (báo cáo tổng hợp)** và toàn bộ **Ảnh gốc**.
 
 ### Chạy thủ công (Mọi hệ điều hành)
 ```bash

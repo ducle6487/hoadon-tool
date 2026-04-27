@@ -9,6 +9,10 @@ echo "======================================"
 # Tắt các tiến trình bị kẹt cũ
 pkill -f "uvicorn app:app" || true
 
+# Tự động cài đặt thư viện thiếu (nếu có)
+echo "📦 Đang kiểm tra và cập nhật thư viện hệ thống..."
+python3 -m pip install -r requirements.txt --quiet
+
 # Khởi động server nội bộ
 python3 -m uvicorn app:app --port 8000 &
 SERVER_PID=$!
