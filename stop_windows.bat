@@ -11,6 +11,9 @@ echo.
 echo Dang tat server uvicorn...
 taskkill /F /IM python.exe /T >nul 2>&1
 taskkill /F /IM uvicorn.exe /T >nul 2>&1
+echo Dang tat Cloudflare Tunnel...
+taskkill /F /IM cloudflared.exe /T >nul 2>&1
+
 
 echo.
 echo ==============================================================
